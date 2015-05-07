@@ -11,4 +11,6 @@
 
 unsigned long get_micros();
 int get_timestamp_secs();
+int read_file(char* file_name, char** buffer);
+int write_file(char* file_name, char* output_txt);
 #endif
