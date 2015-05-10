@@ -58,8 +58,8 @@ int main(int argc, char **argv) {
     listen_addr.addr.sin6.sin6_family = AF_INET6;
     listen_addr.addr.sin6.sin6_port = htons(CAM_COAP_DEFAULT_PORT);
 
-
-    inet_pton(AF_INET6, "::1", &(listen_addr.addr.sin6.sin6_addr));
+    inet_pton(AF_INET6, "aaaa::1", &(listen_addr.addr.sin6.sin6_addr));
+    // inet_pton(AF_INET6, "::1", &(listen_addr.addr.sin6.sin6_addr));
 
     interface = coap_new_endpoint(&listen_addr, COAP_ENDPOINT_DTLS);
     if (!coap_application_attach(app, interface)) {
