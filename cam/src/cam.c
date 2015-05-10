@@ -46,4 +46,37 @@ int main(int argc, char **argv) {
   coap_set_log_level(LOG_DEBUG);
 
   app = coap_new_application();
+
+  if (app) {
+/* bind interfaces */
+
+#if HAVE_LIBTINYDTLS
+    coap_address_init(&listen_addr);
+
+    /* set IPv6 interface address */
+    listen_addr.size = sizeof(struct sockaddr_in6);
+    listen_addr.addr.sin6.sin6_family = AF_INET6;
+    listen_addr.addr.sin6.sin6_port = htons(CAM_COAP_DEFAULT_PORT);
+
+
+    inet_pton(AF_INET6, "::1", &(listen_addr.addr.sin6.sin6_addr));
+
+    interface = coap_new_endpoint(&listen_addr, COAP_ENDPOINT_DTLS);
+    if (!coap_application_attach(app, interface)) {
+      coap_log(LOG_CRIT, "failed to create endpoint\n");
+      coap_free_endpoint(interface);
+      goto cleanup;
+    }
+#endif
+
+    if (init_resource(app->coap_context)) {
+      result = (int)coap_application_run(app); /* main loop */
+      coap_free_application(app);
+    }
+  }
+
+cleanup:
+  coap_free_application(app);
+  return result;
+
 }
