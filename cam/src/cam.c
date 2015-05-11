@@ -80,3 +80,25 @@ cleanup:
   return result;
 
 }
+
+/* Handler for client access request */
+void hnd_access_request(coap_context_t *ctx, struct coap_resource_t *resource,
+                        const coap_endpoint_t *local_interface,
+                        coap_address_t *peer, coap_pdu_t *request, str *token,
+                        coap_pdu_t *response) {
+  printf("Got Access Request\n");
+  coap_opt_iterator_t opt_iter;
+  coap_opt_t *option;
+
+  size_t payload_len;
+  unsigned char *payload;
+
+  size_t cbor_offset, ar_map_length, ai_arr_length;
+  int as_key, ai_key, ai_method;
+  char *as_str = (char *)malloc(CBOR_MAX_STR);
+  char *rs_str = (char *)malloc(CBOR_MAX_STR);
+  UriUriA as_uri;
+
+  free(as_str);
+  free(rs_str);
+}
