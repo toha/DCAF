@@ -99,6 +99,30 @@ void hnd_access_request(coap_context_t *ctx, struct coap_resource_t *resource,
   char *rs_str = (char *)malloc(CBOR_MAX_STR);
   UriUriA as_uri;
 
+  coap_get_data(request, &payload_len, &payload);
+
+  // is request payload of type "application/dcaf+cbor" (else 405)?
+  option = coap_check_option(request, COAP_OPTION_CONTENT_TYPE, &opt_iter);
+  if (!option) {
+    printf("No Content Type\n");
+    response->hdr->code = COAP_RESPONSE_CODE(405);
+    return;
+  }
+
+  if (COAP_MEDIATYPE_APPLICATION_DCAF !=
+      coap_decode_var_bytes(COAP_OPT_VALUE(option), COAP_OPT_LENGTH(option))) {
+    printf("Invalid Content Type\n");
+    response->hdr->code = COAP_RESPONSE_CODE(405);
+    return;
+  }
+
+  if (!coap_get_data(request, &payload_len, &payload) || 0 >= payload_len) {
+    printf("No Payload\n");
+    response->hdr->code = COAP_RESPONSE_CODE(405);
+    return;
+  }
+
+
   free(as_str);
   free(rs_str);
 }
