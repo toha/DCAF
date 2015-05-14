@@ -122,6 +122,27 @@ void hnd_access_request(coap_context_t *ctx, struct coap_resource_t *resource,
     return;
   }
 
+  // parse cbor payload
+  cbor_stream_t cbor_stream = {payload, payload_len, payload_len};
+  // are at least the fields AS and AI included (else 405)?
+  cbor_offset = cbor_deserialize_map(&cbor_stream, 0, &ar_map_length);
+  if (ar_map_length < 2 || cbor_offset > payload_len) {
+    printf("Invalid CBOR data from Client\n");
+    response->hdr->code = COAP_RESPONSE_CODE(405);
+    return;
+  }
+
+  cbor_offset += cbor_deserialize_int(&cbor_stream, cbor_offset, &as_key);
+  cbor_offset += cbor_deserialize_unicode_string(&cbor_stream, cbor_offset,
+                                                 as_str, CBOR_MAX_STR);
+  cbor_offset += cbor_deserialize_int(&cbor_stream, cbor_offset, &ai_key);
+  cbor_offset +=
+      cbor_deserialize_array(&cbor_stream, cbor_offset, &ai_arr_length);
+  cbor_offset += cbor_deserialize_unicode_string(&cbor_stream, cbor_offset,
+                                                 rs_str, CBOR_MAX_STR);
+  cbor_offset += cbor_deserialize_int(&cbor_stream, cbor_offset, &ai_method);
+
+
 
   free(as_str);
   free(rs_str);
