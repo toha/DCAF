@@ -142,6 +142,28 @@ void hnd_access_request(coap_context_t *ctx, struct coap_resource_t *resource,
                                                  rs_str, CBOR_MAX_STR);
   cbor_offset += cbor_deserialize_int(&cbor_stream, cbor_offset, &ai_method);
 
+  // derive as info (host, port, uri) from as field
+  if (0 != parse_uri(as_str, &as_uri)) {
+    printf("Invalid CBOR data from Client\n");
+    response->hdr->code = COAP_RESPONSE_CODE(405);
+    return;
+  }
+
+  // create http-request for ticket request message
+  CURL *curl_handle;
+  CURLcode res;
+  struct curl_slist *headers = NULL;
+  struct MemoryStruct chunk;
+  chunk.memory = malloc(1); /* will be grown as needed by the realloc above */
+  chunk.size = 0;           /* no data at this point */
+  static const char *pCertFile = "cam.cert";
+  static const char *pCACertFile = "sam.pem";
+  const char *pKeyName;
+  const char *pKeyType;
+  pKeyName = "cam.pem";
+  pKeyType = "PEM";
+
+  curl_global_init(CURL_GLOBAL_DEFAULT);
 
 
   free(as_str);
