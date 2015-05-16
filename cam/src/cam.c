@@ -165,6 +165,24 @@ void hnd_access_request(coap_context_t *ctx, struct coap_resource_t *resource,
 
   curl_global_init(CURL_GLOBAL_DEFAULT);
 
+  curl_handle = curl_easy_init();
+  if (!curl_handle) {
+    response->hdr->code = COAP_RESPONSE_CODE(405);
+    return;
+  }
+  // libcurl set payload
+  curl_easy_setopt(curl_handle, CURLOPT_URL, as_str);
+  curl_easy_setopt(curl_handle, CURLOPT_POSTFIELDS, payload);
+  curl_easy_setopt(curl_handle, CURLOPT_POSTFIELDSIZE, payload_len);
+
+  // libcurl Use Client-Cert
+  curl_easy_setopt(curl_handle, CURLOPT_SSLCERTTYPE, "PEM");
+  curl_easy_setopt(curl_handle, CURLOPT_SSLCERT, "cam.pem");
+  // libcurl verify server cert
+  curl_easy_setopt(curl_handle, CURLOPT_SSL_VERIFYPEER, 1L);
+  curl_easy_setopt(curl_handle, CURLOPT_SSL_VERIFYHOST, 0L);
+  // Client-Authority-Cert for authenticate SAM
+  curl_easy_setopt(curl_handle, CURLOPT_CAINFO, "ca.crt");
 
   free(as_str);
   free(rs_str);
