@@ -184,6 +184,21 @@ void hnd_access_request(coap_context_t *ctx, struct coap_resource_t *resource,
   // Client-Authority-Cert for authenticate SAM
   curl_easy_setopt(curl_handle, CURLOPT_CAINFO, "ca.crt");
 
+
+  /* set the result code */
+  response->hdr->code = COAP_RESPONSE_CODE(205);
+
+  /* add a Content-Type option to describe the returned data */
+  coap_add_option(response, COAP_OPTION_CONTENT_TYPE,
+                  coap_encode_var_bytes(buf, COAP_MEDIATYPE_APPLICATION_DCAF),
+                  buf);
+
+  /* add data */
+  coap_add_data(response, chunk.size, (unsigned char *)chunk.memory);
+
+  if (chunk.memory)
+    free(chunk.memory);
+
   free(as_str);
   free(rs_str);
 }
