@@ -1,5 +1,7 @@
 #include "cam.h"
 
+#include "coap_app.h"
+
 #define DTLS_PSK_GEN_HMAC_SHA256 0x00
 
 #define CAM_COAP_DEFAULT_PORT 5684 // COAPS_DEFAULT_PORT
@@ -78,7 +80,6 @@ int main(int argc, char **argv) {
 cleanup:
   coap_free_application(app);
   return result;
-
 }
 
 /* Handler for client access request */
@@ -184,6 +185,28 @@ void hnd_access_request(coap_context_t *ctx, struct coap_resource_t *resource,
   // Client-Authority-Cert for authenticate SAM
   curl_easy_setopt(curl_handle, CURLOPT_CAINFO, "ca.crt");
 
+  headers = curl_slist_append(headers, "Content-Type: application/dcaf+cbor");
+  curl_easy_setopt(curl_handle, CURLOPT_HTTPHEADER, headers);
+  curl_easy_setopt(curl_handle, CURLOPT_WRITEFUNCTION, WriteMemoryCallback);
+  curl_easy_setopt(curl_handle, CURLOPT_WRITEDATA, (void *)&chunk);
+  // Send http request to sam
+  res = curl_easy_perform(curl_handle);
+  /* Check for errors */
+  if (res != CURLE_OK) {
+    fprintf(stderr, "curl_easy_perform() failed: %s\n",
+            curl_easy_strerror(res));
+    printf("Error while http request\n");
+    response->hdr->code = COAP_RESPONSE_CODE(405);
+    return;
+  }
+
+  /* always cleanup */
+  curl_easy_cleanup(curl_handle);
+  curl_global_cleanup();
+
+  // send answer to client
+  printf("Got ticket - send to client\n");
+  unsigned char buf[3]; /* need some storage for option encoding */
 
   /* set the result code */
   response->hdr->code = COAP_RESPONSE_CODE(205);
