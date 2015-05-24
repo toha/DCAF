@@ -225,3 +225,25 @@ void hnd_access_request(coap_context_t *ctx, struct coap_resource_t *resource,
   free(as_str);
   free(rs_str);
 }
+
+/* Creates a new resource in ctx. The return value is 1 on success, or
+ * 0 on error . */
+int init_resource(coap_context_t *ctx) {
+  coap_resource_t *r_access_request;
+
+  /* allocate storage for a new resource with given path name (must
+   * omit leading '/') */
+  r_access_request =
+      coap_resource_init((unsigned char *)DCAF_ACCESS_REQUEST_RESOURCE,
+                         strlen(DCAF_ACCESS_REQUEST_RESOURCE), 0);
+  if (r_access_request) {
+    /* register a function as POST handler for this resource */
+    coap_register_handler(r_access_request, COAP_REQUEST_POST,
+                          hnd_access_request);
+
+    /* and finally add the resource to the current context */
+    coap_add_resource(ctx, r_access_request);
+  }
+
+  return r_access_request != NULL;
+}
