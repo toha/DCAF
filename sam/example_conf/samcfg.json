@@ -1,0 +1,5 @@
+{
+	"listen_str": "ssl://[aaaa::1]:8080:sam.pem:ca.crt",
+	"rop_fingerprint": "V6JkjQlYJE3nOOH3smNBgT09uvA=",
+	"global_lifetime": 3600
+}
