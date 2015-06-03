@@ -1,0 +1,16 @@
+[
+	{
+	    "id": "Transportregel 1",
+	    "subject": "mJ6N/FQ55PDPfi0WqMzf3W2uWgk=",
+	    "resources": [
+	        {
+	            "rs": "aaaa::200:0:0:2",
+	            "resource": "temp/1",
+	            "methods": 1
+	        }
+	    ],
+	    "conditions": [],
+	    "expiration_time": 0,
+	    "priority": 0
+	}
+]

@@ -1,0 +1,16 @@
+[
+    {
+        "id": "aaaa::200:0:0:2",
+        "secret": "2NUH+rjrEUGxFywoYSpWBQ==",
+        "last_seq_nr": 0,
+        "rs_state_lowest_seq": 0,
+        "resources": [
+            {
+                "resource": "temp/1",
+                "methods": 1
+            }
+        ],
+        "conditions": []
+    }
+
+]
