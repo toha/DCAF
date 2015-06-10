@@ -17,4 +17,6 @@ int read_file(char *file_name, char **buffer);
 int write_file(char *file_name, char *output_txt);
 int parse_uri(char *uri_str, UriUriA *uri);
 void hexDump(char *desc, void *addr, int len);
+int http_send_error(struct mg_connection *conn, int status_code, char *msg);
+int power(int base, unsigned int exp);
 #endif

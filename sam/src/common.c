@@ -111,3 +111,16 @@ void hexDump(char *desc, void *addr, int len) {
   // printf ("  %s\n", buff);
   printf("\n");
 }
+
+int http_send_error(struct mg_connection *conn, int status_code, char *msg) {
+  mg_send_status(conn, status_code);
+  mg_printf_data(conn, msg);
+  return MG_TRUE;
+}
+
+int power(int base, unsigned int exp) {
+  int i, result = 1;
+  for (i = 0; i < exp; i++)
+    result *= base;
+  return result;
+}
