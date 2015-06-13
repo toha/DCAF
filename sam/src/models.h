@@ -24,6 +24,22 @@ struct rule_resource {
   LIST_ENTRY(rule_resource) next;
 };
 
+struct rule_condition {
+  char *key;
+  int data[2];
+  LIST_ENTRY(rule_condition) next;
+};
+
+struct rule {
+  char *id;
+  char *subject;
+  unsigned int expiration_time;
+  int priority;
+  LIST_HEAD(rule_res_list, rule_resource) resources;
+  LIST_HEAD(rule_cond_list, rule_condition) conditions;
+  LIST_ENTRY(rule) next;
+};
+
 struct rs_resource {
   char *resource;
   int methods;
