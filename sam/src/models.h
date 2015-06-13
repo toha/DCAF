@@ -17,4 +17,17 @@ struct subject {
   LIST_ENTRY(subject) next;
 };
 
+struct rule_resource {
+  char *rs;
+  char *resource;
+  int methods;
+  LIST_ENTRY(rule_resource) next;
+};
+
+struct rs_resource {
+  char *resource;
+  int methods;
+  LIST_ENTRY(rs_resource) next;
+};
+
 #endif
