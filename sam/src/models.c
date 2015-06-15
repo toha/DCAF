@@ -168,3 +168,105 @@ int rule2json(struct rule *r, json_t **j) {
 
   return 0;
 }
+
+int json2rs_resource(json_t *j, struct rs_resource *r) {
+  if (!json_is_object(j)) {
+    return 1;
+  }
+
+  json_t *j_resource = json_object_get(j, "resource");
+  json_t *j_methods = json_object_get(j, "methods");
+  if (!j_resource || !j_methods || !json_is_string(j_resource) ||
+      !json_is_number(j_methods)) {
+    return 2;
+  }
+
+  r->resource = json_string_value(j_resource);
+  r->methods = json_integer_value(j_methods);
+
+  return 0;
+}
+
+int rs_resource2json(struct rs_resource *r, json_t **j) {
+  *j = json_object();
+  json_object_set(*j, "resource", json_string(r->resource));
+  json_object_set(*j, "methods", json_integer(r->methods));
+  return 0;
+}
+
+int json2resource_server(json_t *j, struct resource_server *rs) {
+  if (!json_is_object(j)) {
+    return 1;
+  }
+  json_t *j_id = json_object_get(j, "id");
+  json_t *j_secret = json_object_get(j, "secret");
+  json_t *j_last_seq_nr = json_object_get(j, "last_seq_nr");
+  json_t *j_rs_state_lowest_seq = json_object_get(j, "rs_state_lowest_seq");
+  json_t *j_conditions = json_object_get(j, "conditions");
+  json_t *j_resources = json_object_get(j, "resources");
+  if (!j_id || !j_secret || !j_conditions || !j_resources || !j_last_seq_nr ||
+      !j_rs_state_lowest_seq || !json_is_string(j_id) ||
+      !json_is_string(j_secret) || !json_is_array(j_conditions) ||
+      !json_is_array(j_resources) || !json_is_number(j_last_seq_nr) ||
+      !json_is_number(j_rs_state_lowest_seq)) {
+    return 2;
+  }
+
+  rs->id = json_string_value(j_id);
+  rs->secret = json_string_value(j_secret);
+  rs->last_seq_nr = json_integer_value(j_last_seq_nr);
+  rs->rs_state_lowest_seq = json_integer_value(j_rs_state_lowest_seq);
+
+  LIST_INIT(&rs->resources);
+  LIST_INIT(&rs->conditions);
+  size_t index;
+  json_t *value;
+  json_array_foreach(j_resources, index, value) {
+    struct rs_resource *rsr = malloc(sizeof(struct rs_resource));
+    if (0 != json2rs_resource(value, rsr)) {
+      return 4;
+    }
+    LIST_INSERT_HEAD(&rs->resources, rsr, next);
+  }
+  /*size_t index2;
+  json_t *value2;
+  json_array_foreach(j_conditions, index2, value2) {
+      struct rule_condition *rc = malloc(sizeof(struct rule_condition));
+      if (0 != json2rule_condition(value2, rc)) {
+          return 5;
+      }
+      LIST_INSERT_HEAD(&rs->conditions, rc, next);
+  }*/
+
+  return 0;
+}
+
+int resource_server2json(struct resource_server *r, json_t **j) {
+  *j = json_object();
+  json_object_set(*j, "id", json_string(r->id));
+  json_object_set(*j, "secret", json_string(r->secret));
+  json_object_set(*j, "last_seq_nr", json_integer(r->last_seq_nr));
+  json_object_set(*j, "rs_state_lowest_seq",
+                  json_integer(r->rs_state_lowest_seq));
+  json_object_set(*j, "resources", json_array());
+  json_object_set(*j, "conditions", json_array());
+
+  json_t *j_resources_arr = json_object_get(*j, "resources");
+  json_t *j_conditions_arr = json_object_get(*j, "conditions");
+
+  struct rs_resource *np;
+  LIST_FOREACH(np, &r->resources, next) {
+    json_t *j_rs_resource;
+    rs_resource2json(np, &j_rs_resource);
+    json_array_append(j_resources_arr, j_rs_resource);
+  }
+
+  struct rule_condition *np2;
+  LIST_FOREACH(np2, &r->conditions, next) {
+    json_t *j_rs_cond;
+    rule_condition2json(np2, &j_rs_cond);
+    json_array_append(j_conditions_arr, j_rs_cond);
+  }
+
+  return 0;
+}
