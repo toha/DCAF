@@ -21,5 +21,9 @@ int dao_init();
 int dao_reload_cache();
 int dao_write_cache();
 
+int dao_get_samcfg(struct sam_cfg *c);
+unsigned int dao_get_cfg_lifetime();
+char *dao_get_cfg_rop_fingerprint();
+char *dao_get_cfg_listen_str();
 
 #endif

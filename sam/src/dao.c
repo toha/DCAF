@@ -72,3 +72,46 @@ int dao_write_cache() {
 
   return 0;
 }
+
+int dao_get_samcfg(struct sam_cfg *c) {
+  json_t *j_rop_fp = json_object_get(cache.samcfg, "rop_fingerprint");
+  json_t *j_lifetime = json_object_get(cache.samcfg, "global_lifetime");
+  json_t *j_listen = json_object_get(cache.samcfg, "listen_str");
+  if (!j_rop_fp || !j_lifetime || !json_is_string(j_rop_fp) ||
+      !json_is_number(j_lifetime) || !j_listen || !json_is_string(j_listen)) {
+    return -1;
+  }
+
+  c->rop_fingerprint = json_string_value(j_rop_fp);
+  c->global_lifetime = json_integer_value(j_lifetime);
+  c->listen_str = json_string_value(j_listen);
+
+  return 0;
+}
+
+unsigned int dao_get_cfg_lifetime() {
+  json_t *j_lifetime = json_object_get(cache.samcfg, "global_lifetime");
+  if (!j_lifetime || !json_is_number(j_lifetime)) {
+    return 3600;
+  }
+
+  return json_integer_value(j_lifetime);
+}
+
+char *dao_get_cfg_rop_fingerprint() {
+  json_t *j_rop_fp = json_object_get(cache.samcfg, "rop_fingerprint");
+  if (!j_rop_fp || !json_is_string(j_rop_fp)) {
+    return "invalid";
+  }
+
+  return json_string_value(j_rop_fp);
+}
+
+char *dao_get_cfg_listen_str() {
+  json_t *j_listen = json_object_get(cache.samcfg, "listen_str");
+  if (!j_listen || !json_is_string(j_listen)) {
+    return "ssl://[aaaa::1]:8080:sam.pem:ca.crt";
+  }
+
+  return json_string_value(j_listen);
+}
