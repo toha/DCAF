@@ -25,5 +25,9 @@ int dao_get_samcfg(struct sam_cfg *c);
 unsigned int dao_get_cfg_lifetime();
 char *dao_get_cfg_rop_fingerprint();
 char *dao_get_cfg_listen_str();
-
+// int dao_get_subjects(LIST_HEAD(, subject) *subjects);
+int dao_get_subject(char *id, struct subject *subject);
+int dao_add_subject(struct subject *c);
+int dao_del_subject(char *subjectid);
+int dao_edit_subject(char *subjectid, struct subject *new_subject);
 #endif

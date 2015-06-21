@@ -115,3 +115,83 @@ char *dao_get_cfg_listen_str() {
 
   return json_string_value(j_listen);
 }
+
+int dao_get_subjects(LIST_HEAD(, subject) * subjects) {
+  size_t index;
+  json_t *value;
+  json_array_foreach(cache.subjects, index, value) {
+    struct subject *c = malloc(sizeof(struct subject));
+    if (0 != json2subject(value, c)) {
+      return 1;
+    }
+    LIST_INSERT_HEAD(subjects, c, next);
+  }
+  return 0;
+}
+
+int dao_get_subject(char *fingerprint, struct subject *c) {
+  json_t *j_subject;
+  int i;
+  for (i = 0; i < json_array_size(cache.subjects); i++) {
+    json_t *subject_obj = json_array_get(cache.subjects, i);
+    if (!subject_obj || !json_is_object(subject_obj)) {
+      return 2;
+    }
+    json_t *subjectid_str = json_object_get(subject_obj, "cert_fingerprint");
+    const char *subjectname = json_string_value(subjectid_str);
+    if (!strcmp(subjectname, fingerprint)) {
+      j_subject = subject_obj;
+      return json2subject(j_subject, c);
+    }
+  }
+
+  return 1;
+}
+
+int dao_add_subject(struct subject *c) {
+  struct subject existing_subject;
+  if (0 == dao_get_subject(c->cert_fingerprint, &existing_subject)) {
+    printf("subject with this fingerprint already exists\n");
+    return 1;
+  }
+
+  json_t *j_subject;
+  if (0 == subject2json(c, &j_subject) &&
+      0 == json_array_append(cache.subjects, j_subject)) {
+    return dao_write_cache();
+  } else {
+    return 1;
+  }
+}
+
+int dao_del_subject(char *subjectfingerprint) {
+  struct subject existing_subject;
+  if (0 != dao_get_subject(subjectfingerprint, &existing_subject)) {
+    printf("subject not found\n");
+    return 1;
+  }
+
+  int subjectidx = _dao_get_subject_cache_pos(subjectfingerprint);
+  if (0 == json_array_remove(cache.subjects, subjectidx)) {
+    return dao_write_cache();
+  } else {
+    printf("error on removing subject from cache\n");
+    return 1;
+  }
+}
+
+int dao_edit_subject(char *subjectfingerprint, struct subject *new_subject) {
+  int subjectidx = _dao_get_subject_cache_pos(subjectfingerprint);
+  if (-1 == subjectidx) {
+    printf("subject not found\n");
+    return 1;
+  }
+
+  json_t *j_new_subject;
+  if (0 == subject2json(new_subject, &j_new_subject) &&
+      0 == json_array_set_new(cache.subjects, subjectidx, j_new_subject)) {
+    return dao_write_cache();
+  } else {
+    return 2;
+  }
+}
