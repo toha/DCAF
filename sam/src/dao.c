@@ -195,3 +195,77 @@ int dao_edit_subject(char *subjectfingerprint, struct subject *new_subject) {
     return 2;
   }
 }
+
+
+int dao_get_rules(LIST_HEAD(, rule) * rules) {
+  size_t index;
+  json_t *value;
+  json_array_foreach(cache.rules, index, value) {
+    struct rule *r = malloc(sizeof(struct rule));
+    if (0 != json2rule(value, r)) {
+      return 1;
+    }
+    LIST_INSERT_HEAD(rules, r, next);
+  }
+  return 0;
+}
+
+int dao_get_rule(char *id, struct rule *r) {
+  int i;
+  for (i = 0; i < json_array_size(cache.rules); i++) {
+    json_t *rule_obj = json_array_get(cache.rules, i);
+    if (!rule_obj || !json_is_object(rule_obj)) {
+      printf("fields missing\n");
+      exit(1);
+    }
+    json_t *ruleid_str = json_object_get(rule_obj, "id");
+    const char *ruleid_from_cache = json_string_value(ruleid_str);
+    if (!strcmp(ruleid_from_cache, id)) {
+      return json2rule(rule_obj, r);
+    }
+  }
+
+  return 1;
+}
+
+int dao_add_rule(struct rule *new_rule) {
+  json_t *j_new_rule;
+  if (0 == rule2json(new_rule, &j_new_rule) &&
+      0 == json_array_append(cache.rules, j_new_rule)) {
+    return dao_write_cache();
+  } else {
+    return 1;
+  }
+}
+
+int dao_del_rule(char *ruleid) {
+  struct rule existing_rule;
+  if (0 != dao_get_rule(ruleid, &existing_rule)) {
+    printf("rule not found\n");
+    return 1;
+  }
+
+  int ruleidx = _dao_get_rule_cache_pos(ruleid);
+  if (0 == json_array_remove(cache.rules, ruleidx)) {
+    return dao_write_cache();
+  } else {
+    printf("error on removing rule from cache\n");
+    return 1;
+  }
+}
+
+int dao_edit_rule(char *ruleid, struct rule new_rule) {
+  int ruleidx = _dao_get_rule_cache_pos(ruleid);
+  if (-1 == ruleidx) {
+    printf("rule not found\n");
+    return 1;
+  }
+
+  json_t *j_new_role;
+  if (0 == rule2json(&new_rule, &j_new_role) &&
+      0 == json_array_set_new(cache.rules, ruleidx, j_new_role)) {
+    return dao_write_cache();
+  } else {
+    return 2;
+  }
+}

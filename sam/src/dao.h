@@ -30,4 +30,10 @@ int dao_get_subject(char *id, struct subject *subject);
 int dao_add_subject(struct subject *c);
 int dao_del_subject(char *subjectid);
 int dao_edit_subject(char *subjectid, struct subject *new_subject);
+
+// int dao_get_rules(json_t** rules);
+int dao_get_rule(char *id, struct rule *r);
+int dao_add_rule(struct rule *new_rule);
+int dao_del_rule(char *ruleid);
+int dao_edit_rule(char *ruleid, struct rule new_rule);
 #endif
