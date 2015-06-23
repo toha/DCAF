@@ -342,3 +342,61 @@ int dao_edit_rs(char *rsid, struct resource_server *new_rs) {
     return 2;
   }
 }
+
+
+
+int dao_get_tickets(LIST_HEAD(, dcaf_ticket) * tickets) {
+  size_t index;
+  json_t *value;
+  json_array_foreach(cache.tickets, index, value) {
+    struct dcaf_ticket *t = malloc(sizeof(struct dcaf_ticket));
+    if (0 != json2ticket(value, t)) {
+      return 1;
+    }
+    LIST_INSERT_HEAD(tickets, t, next);
+  }
+  return 0;
+}
+
+int dao_get_ticket(char *id, struct dcaf_ticket *t) {
+  int i;
+  for (i = 0; i < json_array_size(cache.tickets); i++) {
+    json_t *ticket_obj = json_array_get(cache.tickets, i);
+    if (!ticket_obj || !json_is_object(ticket_obj)) {
+      exit(1);
+    }
+    json_t *ticketid_str = json_object_get(ticket_obj, "id");
+    const char *ticketid_from_cache = json_string_value(ticketid_str);
+    if (!strcmp(ticketid_from_cache, id)) {
+      return json2ticket(ticket_obj, t);
+    }
+  }
+
+  return 1;
+}
+
+int dao_add_ticket(struct dcaf_ticket *new_ticket) {
+  json_t *j_new_ticket;
+  if (0 == ticket2json(new_ticket, &j_new_ticket) &&
+      0 == json_array_append(cache.tickets, j_new_ticket)) {
+    return dao_write_cache();
+  } else {
+    return 1;
+  }
+}
+
+int dao_del_ticket(char *ticketid) {
+  struct dcaf_ticket existing_ticket;
+  if (0 != dao_get_ticket(ticketid, &existing_ticket)) {
+    printf("ticket not found\n");
+    return 1;
+  }
+
+  int ticketidx = _dao_get_ticket_cache_pos(ticketid);
+  if (0 == json_array_remove(cache.tickets, ticketidx)) {
+    return dao_write_cache();
+  } else {
+    printf("error on removing ticket from cache\n");
+    return 1;
+  }
+}

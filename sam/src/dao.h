@@ -43,4 +43,9 @@ int dao_add_rs(struct resource_server *new_rs);
 int dao_del_rs(char *rsid);
 int dao_edit_rs(char *rsid, struct resource_server *new_rs);
 
+// int dao_get_tickets(LIST_HEAD(, dcaf_ticket) * tickets);
+int dao_get_ticket(char *id, struct dcaf_ticket *t);
+int dao_add_ticket(struct dcaf_ticket *new_ticket);
+int dao_del_ticket(char *ticketid);
+
 #endif
