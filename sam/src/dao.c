@@ -269,3 +269,76 @@ int dao_edit_rule(char *ruleid, struct rule new_rule) {
     return 2;
   }
 }
+
+
+int dao_get_allrs(LIST_HEAD(, resource_server) * allrs) {
+  size_t index;
+  json_t *value;
+  json_array_foreach(cache.resource_servers, index, value) {
+    struct resource_server *r = malloc(sizeof(struct resource_server));
+    if (0 != json2resource_server(value, r)) {
+      return 1;
+    }
+    LIST_INSERT_HEAD(allrs, r, next);
+  }
+  return 0;
+}
+
+int dao_get_rs(char *id, struct resource_server *rs) {
+  int i;
+  for (i = 0; i < json_array_size(cache.resource_servers); i++) {
+    json_t *rs_obj = json_array_get(cache.resource_servers, i);
+    if (!rs_obj || !json_is_object(rs_obj)) {
+      exit(1);
+    }
+    json_t *rsid_str = json_object_get(rs_obj, "id");
+    const char *rsid_from_cache = json_string_value(rsid_str);
+    if (!strcmp(rsid_from_cache, id)) {
+      return json2resource_server(rs_obj, rs);
+    }
+  }
+
+  return 1;
+}
+
+int dao_add_rs(struct resource_server *new_rs) {
+  json_t *j_new_rs;
+  if (0 == resource_server2json(new_rs, &j_new_rs) &&
+      0 == json_array_append(cache.resource_servers, j_new_rs)) {
+    return dao_write_cache();
+  } else {
+    return 1;
+  }
+}
+
+int dao_del_rs(char *rsid) {
+  struct resource_server existing_rs;
+  if (0 != dao_get_rs(rsid, &existing_rs)) {
+    printf("rs not found\n");
+    return 1;
+  }
+
+  int rsidx = _dao_get_rs_cache_pos(rsid);
+  if (0 == json_array_remove(cache.resource_servers, rsidx)) {
+    return dao_write_cache();
+  } else {
+    printf("error on removing rs from cache\n");
+    return 1;
+  }
+}
+
+int dao_edit_rs(char *rsid, struct resource_server *new_rs) {
+  int rsidx = _dao_get_rs_cache_pos(rsid);
+  if (-1 == rsidx) {
+    printf("rs not found\n");
+    return 1;
+  }
+  json_t *j_new_rs;
+  if (0 == resource_server2json(new_rs, &j_new_rs) &&
+      0 == json_array_set_new(cache.resource_servers, rsidx, j_new_rs)) {
+    return dao_write_cache();
+
+  } else {
+    return 2;
+  }
+}

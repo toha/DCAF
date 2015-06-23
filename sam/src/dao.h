@@ -36,4 +36,11 @@ int dao_get_rule(char *id, struct rule *r);
 int dao_add_rule(struct rule *new_rule);
 int dao_del_rule(char *ruleid);
 int dao_edit_rule(char *ruleid, struct rule new_rule);
+
+// int dao_get_allrs(json_t** resource_servers);
+int dao_get_rs(char *id, struct resource_server *rs);
+int dao_add_rs(struct resource_server *new_rs);
+int dao_del_rs(char *rsid);
+int dao_edit_rs(char *rsid, struct resource_server *new_rs);
+
 #endif
