@@ -196,7 +196,6 @@ int dao_edit_subject(char *subjectfingerprint, struct subject *new_subject) {
   }
 }
 
-
 int dao_get_rules(LIST_HEAD(, rule) * rules) {
   size_t index;
   json_t *value;
@@ -270,7 +269,6 @@ int dao_edit_rule(char *ruleid, struct rule new_rule) {
   }
 }
 
-
 int dao_get_allrs(LIST_HEAD(, resource_server) * allrs) {
   size_t index;
   json_t *value;
@@ -343,8 +341,6 @@ int dao_edit_rs(char *rsid, struct resource_server *new_rs) {
   }
 }
 
-
-
 int dao_get_tickets(LIST_HEAD(, dcaf_ticket) * tickets) {
   size_t index;
   json_t *value;
@@ -399,4 +395,171 @@ int dao_del_ticket(char *ticketid) {
     printf("error on removing ticket from cache\n");
     return 1;
   }
+}
+
+int dao_get_revocations(LIST_HEAD(, dcaf_revocation) * allrevoc) {
+  size_t index;
+  json_t *value;
+  json_array_foreach(cache.revocations, index, value) {
+    struct dcaf_revocation *r = malloc(sizeof(struct dcaf_revocation));
+    if (0 != json2revocation(value, r)) {
+      return 1;
+    }
+    LIST_INSERT_HEAD(allrevoc, r, next);
+  }
+  return 0;
+}
+
+int dao_add_revocation(struct dcaf_revocation *revocation) {
+  char *ticketid = revocation->ticket.id;
+  struct dcaf_ticket existing_ticket;
+  if (0 != dao_get_ticket(ticketid, &existing_ticket)) {
+    printf("ticket not found\n");
+    return 1;
+  }
+
+  // delete from tickets
+  if (0 != dao_del_ticket(ticketid)) {
+    printf("error on deleting ticket");
+    return 2;
+  }
+
+  // and add to revocation list
+  json_t *j_new_revocation;
+  int a = revocation2json(revocation, &j_new_revocation);
+  int b = json_array_append(cache.revocations, j_new_revocation);
+  if (0 == a && 0 == b) {
+    return dao_write_cache();
+  } else {
+    return 3;
+  }
+}
+
+int dao_edit_revocation(char *ticket_id,
+                        struct dcaf_revocation *new_revocation) {
+  int revocation_idx = _dao_get_revocation_cache_pos(ticket_id);
+  if (-1 == revocation_idx) {
+    printf("revocation not found by ticket id\n");
+    return 1;
+  }
+  json_t *j_new_revocation;
+  if (0 == revocation2json(new_revocation, &j_new_revocation) &&
+      0 == json_array_set_new(cache.revocations, revocation_idx,
+                              j_new_revocation)) {
+    return dao_write_cache();
+
+  } else {
+    return 2;
+  }
+}
+
+int _dao_get_subject_cache_pos(char *fingerprint) {
+  int i;
+  for (i = 0; i < json_array_size(cache.subjects); i++) {
+    json_t *subject_obj = json_array_get(cache.subjects, i);
+    if (!subject_obj || !json_is_object(subject_obj)) {
+      exit(1);
+    }
+    json_t *subjectid_str = json_object_get(subject_obj, "cert_fingerprint");
+    const char *subjectname = json_string_value(subjectid_str);
+    if (!strcmp(subjectname, fingerprint)) {
+      return i;
+    }
+  }
+
+  return -1;
+}
+
+int _dao_get_rule_cache_pos(char *id) {
+  int i;
+  for (i = 0; i < json_array_size(cache.rules); i++) {
+    json_t *rule_obj = json_array_get(cache.rules, i);
+    if (!rule_obj || !json_is_object(rule_obj)) {
+      exit(1);
+    }
+    json_t *ruleid_str = json_object_get(rule_obj, "id");
+    const char *rulename = json_string_value(ruleid_str);
+    if (!strcmp(rulename, id)) {
+      return i;
+    }
+  }
+
+  return -1;
+}
+
+int _dao_get_rs_cache_pos(char *id) {
+  int i;
+  for (i = 0; i < json_array_size(cache.resource_servers); i++) {
+    json_t *rs_obj = json_array_get(cache.resource_servers, i);
+    if (!rs_obj || !json_is_object(rs_obj)) {
+      exit(1);
+    }
+    json_t *rsid_str = json_object_get(rs_obj, "id");
+    const char *rsname = json_string_value(rsid_str);
+    if (!strcmp(rsname, id)) {
+      return i;
+    }
+  }
+
+  return -1;
+}
+
+int _dao_get_ticket_cache_pos(char *id) {
+  int i;
+  for (i = 0; i < json_array_size(cache.tickets); i++) {
+    json_t *ticket_obj = json_array_get(cache.tickets, i);
+    if (!ticket_obj || !json_is_object(ticket_obj)) {
+      exit(1);
+    }
+    json_t *ticketid_str = json_object_get(ticket_obj, "id");
+    const char *ticketname = json_string_value(ticketid_str);
+
+    if (!strcmp(ticketname, id)) {
+      return i;
+    }
+  }
+
+  return -1;
+}
+
+int _dao_get_revocation_cache_pos(char *id) {
+  int i;
+  for (i = 0; i < json_array_size(cache.revocations); i++) {
+    json_t *j_revocation_obj = json_array_get(cache.revocations, i);
+    if (!j_revocation_obj || !json_is_object(j_revocation_obj)) {
+      exit(1);
+    }
+    json_t *j_ticket_obj = json_object_get(j_revocation_obj, "ticket");
+    json_t *j_ticket_obj_str = json_object_get(j_ticket_obj, "id");
+    const char *ticketid = json_string_value(j_ticket_obj_str);
+    if (!strcmp(ticketid, id)) {
+      return i;
+    }
+  }
+
+  return -1;
+}
+
+int filter_json_obj_arr_by_key(json_t *arr, char *key, char *value,
+                               json_t **filtered) {
+  int i;
+  for (i = 0; i < json_array_size(arr); i++) {
+    json_t *json_obj = json_array_get(arr, i);
+    if (!json_obj || !json_is_object(json_obj)) {
+      printf("not an array of objects\n");
+      return 1;
+    }
+
+    json_t *obj_key_value = json_object_get(json_obj, key);
+    if (!json_is_string(obj_key_value)) {
+      printf("value of key %s is not an string\n", key);
+      return 2;
+    }
+
+    const char *valuestr = json_string_value(obj_key_value);
+    if (!strcmp(valuestr, value)) {
+      json_array_append(*filtered, json_obj);
+    }
+  }
+  return 0;
 }

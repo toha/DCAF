@@ -48,4 +48,9 @@ int dao_get_ticket(char *id, struct dcaf_ticket *t);
 int dao_add_ticket(struct dcaf_ticket *new_ticket);
 int dao_del_ticket(char *ticketid);
 
+// int dao_get_revocations(LIST_HEAD(, dcaf_revocation) * allrevoc);
+int dao_add_revocation(struct dcaf_revocation *revocation);
+int dao_edit_revocation(char *ticket_id,
+                        struct dcaf_revocation *new_revocation);
+
 #endif
