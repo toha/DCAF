@@ -75,3 +75,51 @@ int json2ticket(json_t *j, struct dcaf_ticket *t) {
   return 0;
 }
 
+int ticket2json(struct dcaf_ticket *t, json_t **j) {
+  *j = json_object();
+  json_object_set(*j, "id", json_string(t->id));
+
+  json_object_set(*j, "face", json_object());
+
+  size_t b64_length = 0;
+  char *b64_verifier =
+      base64_encode(t->verifier, t->verifier_size, &b64_length);
+
+  json_object_set(*j, "verifier", json_stringn(b64_verifier, b64_length));
+
+  json_object_set(*j, "verifier_size", json_integer(t->verifier_size));
+
+  json_t *face = json_object_get(*j, "face");
+  json_t *j_face_ais_arr = json_array();
+
+  int i;
+  for (i = 0; i < t->face.ai_length; i++) {
+    json_t *face_ai_obj = json_object();
+    json_object_set(face_ai_obj, "rs", json_string(t->face.AIs[i].rs));
+    json_object_set(face_ai_obj, "resource",
+                    json_string(t->face.AIs[i].resource));
+    json_object_set(face_ai_obj, "methods",
+                    json_integer(t->face.AIs[i].methods));
+    json_array_append(j_face_ais_arr, face_ai_obj);
+  }
+  json_object_set(face, "AI", j_face_ais_arr);
+
+  json_object_set(face, "sequence_number",
+                  json_integer(t->face.sequence_number));
+  json_object_set(face, "timestamp", json_integer(t->face.timestamp));
+  json_object_set(face, "lifetime", json_integer(t->face.lifetime));
+  json_object_set(face, "dtls_psk_gen_method",
+                  json_integer(t->face.dtls_psk_gen_method));
+
+
+  json_t *j_conditions = json_array();
+  /*struct rule_condition *condp;
+  LIST_FOREACH(condp, &t->face.conditions, next) {
+    json_t *j_cond;
+    rule_condition2json(condp, &j_cond);
+    json_array_append(j_conditions, j_cond);
+  }*/
+  json_object_set(face, "conditions", j_conditions);
+
+  return 0;
+}
