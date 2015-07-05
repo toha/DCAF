@@ -123,3 +123,46 @@ int ticket2json(struct dcaf_ticket *t, json_t **j) {
 
   return 0;
 }
+
+
+int json2revocation(json_t *j, struct dcaf_revocation *r) {
+  if (!json_is_object(j)) {
+    return 1;
+  }
+
+  json_t *j_ticket = json_object_get(j, "ticket");
+  json_t *j_delivery_time = json_object_get(j, "delivery_time");
+  json_t *j_last_try = json_object_get(j, "last_try");
+  json_t *j_tries = json_object_get(j, "tries");
+
+  if (!j_ticket || !j_delivery_time || !j_last_try || !j_tries ||
+      !json_is_object(j_ticket) || !json_is_number(j_delivery_time) ||
+      !json_is_number(j_last_try) || !json_is_number(j_tries)) {
+    return 2;
+  }
+
+  if (0 != json2ticket(j_ticket, &r->ticket)) {
+    return 3;
+  }
+
+  r->delivery_time = json_integer_value(j_delivery_time);
+  r->last_try = json_integer_value(j_last_try);
+  r->tries = json_integer_value(j_tries);
+
+  return 0;
+}
+
+int revocation2json(struct dcaf_revocation *r, json_t **j) {
+  *j = json_object();
+  json_t *j_ticket;
+  if (0 != ticket2json(&r->ticket, &j_ticket)) {
+    return 1;
+  }
+  json_object_set(*j, "id", json_string(r->ticket.id));
+  json_object_set(*j, "ticket", j_ticket);
+  json_object_set(*j, "delivery_time", json_integer(r->delivery_time));
+  json_object_set(*j, "last_try", json_integer(r->last_try));
+  json_object_set(*j, "tries", json_integer(r->tries));
+
+  return 0;
+}

@@ -47,5 +47,6 @@ int json2ticket(json_t *j, struct dcaf_ticket *t);
 int ticket2json(struct dcaf_ticket *t, json_t **j);
 
 int json2revocation(json_t *j, struct dcaf_revocation *r);
+int revocation2json(struct dcaf_revocation *r, json_t **j);
 
 #endif
