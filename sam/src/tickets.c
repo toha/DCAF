@@ -124,7 +124,6 @@ int ticket2json(struct dcaf_ticket *t, json_t **j) {
   return 0;
 }
 
-
 int json2revocation(json_t *j, struct dcaf_revocation *r) {
   if (!json_is_object(j)) {
     return 1;
