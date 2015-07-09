@@ -19,7 +19,6 @@ void my_coap_response_handler(struct coap_context_t *ctx,
   // Nothing to do async cause coap-client is working synchronously (internally)
 }
 
-
 int revocation_run() {
   LIST_HEAD(all_revocations_list, dcaf_revocation) revocation_list;
   LIST_INIT(&revocation_list);
@@ -29,6 +28,36 @@ int revocation_run() {
   struct dcaf_revocation *np;
   LIST_FOREACH(np, &revocation_list, next) {
     // skip delivered revocations
+    if (0 != np->delivery_time) {
+      continue;
+    }
+
+    // exponential backoff timer
+    int diff_last = get_timestamp_secs() - np->last_try;
+    int wait_time = power(2, np->tries);
+    if (wait_time > REVOCATION_MAX_WAIT_SEC) {
+      wait_time = REVOCATION_MAX_WAIT_SEC;
+    }
+    if (wait_time > diff_last) {
+      continue;
+    }
+
+    printf("Waittime (%d) exceeded for revocation %s - try to send!\n", wait_time,
+           np->ticket.id);
+
+    coap_pdu_t *received_pdu;
+    int send_res = send_revocation(np, received_pdu);
+
+    // update revocation
+    np->tries++;
+
+    if (0 == send_res) {
+      printf("Send revocation successful\n");
+      np->delivery_time = get_timestamp_secs();
+
+    } else {
+      np->last_try = get_timestamp_secs();
+    }
 
     pthread_mutex_lock(&dao_mutex);
     if (0 != dao_edit_revocation(np->ticket.id, np)) {
