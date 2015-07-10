@@ -11,12 +11,36 @@
 #define COAP_APPLICATION_SEND_SECURE 0x01
 #define DCAF_REVOCATION_MSG_MAG_LENGTH 255
 
-
 void my_coap_response_handler(struct coap_context_t *ctx,
                               const coap_endpoint_t *local_interface,
                               const coap_address_t *remote, coap_pdu_t *sent,
                               coap_pdu_t *received, const coap_tid_t id) {
   // Nothing to do async cause coap-client is working synchronously (internally)
+}
+
+int send_revocation(struct dcaf_revocation *revocation,
+                    coap_pdu_t *received_pdu) {
+  printf("Send Revocation\n");
+
+  struct resource_server rs;
+  if (0 != dao_get_rs(revocation->ticket.face.AIs[0].rs, &rs)) {
+    printf("server not found\n");
+    return -1;
+  }
+
+  // build payload
+  unsigned char revocation_msg_cbor[DCAF_REVOCATION_MSG_MAG_LENGTH];
+  cbor_stream_t revocation_msg_cbor_stream;
+  cbor_init(&revocation_msg_cbor_stream, revocation_msg_cbor,
+            sizeof(revocation_msg_cbor));
+
+  cbor_serialize_array(&revocation_msg_cbor_stream, 1); //
+
+  cbor_serialize_int(&revocation_msg_cbor_stream,
+                     revocation->ticket.face.sequence_number);
+
+  size_t uri_length = strlen(DCAF_REVOCATION_URI_PREFIX1) + strlen(rs.id) +
+                      strlen(DCAF_REVOCATION_URI_PREFIX2);
 }
 
 int revocation_run() {
