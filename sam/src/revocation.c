@@ -41,6 +41,39 @@ int send_revocation(struct dcaf_revocation *revocation,
 
   size_t uri_length = strlen(DCAF_REVOCATION_URI_PREFIX1) + strlen(rs.id) +
                       strlen(DCAF_REVOCATION_URI_PREFIX2);
+
+  char *rs_uri = (char *)malloc(sizeof(char) * uri_length + 1);
+  strncpy(rs_uri, DCAF_REVOCATION_URI_PREFIX1,
+          strlen(DCAF_REVOCATION_URI_PREFIX1));
+  int idx = strlen(DCAF_REVOCATION_URI_PREFIX1);
+  strncpy(&rs_uri[idx], rs.id, strlen(rs.id));
+  idx += strlen(rs.id);
+  strncpy(&rs_uri[idx], DCAF_REVOCATION_URI_PREFIX2,
+          strlen(DCAF_REVOCATION_URI_PREFIX2));
+  idx += strlen(DCAF_REVOCATION_URI_PREFIX2);
+  rs_uri[idx] = '\0';
+
+  size_t rs_secret_size = 0;
+  unsigned char *rs_secret =
+      base64_decode(rs.secret, strlen(rs.secret), &rs_secret_size);
+
+  int a = coap_client_run(&my_coap_response_handler, &received_pdu, 2, rs_uri,
+                          "sam", 3, rs_secret, rs_secret_size,
+                          revocation_msg_cbor, revocation_msg_cbor_stream.pos);
+
+  free(rs_secret);
+  if (0 == a && received_pdu) {
+    printf("Process incoming %d.%02d response:\n",
+           (received_pdu->hdr->code >> 5), received_pdu->hdr->code & 0x1F);
+    free(rs_uri);
+    if (COAP_RESPONSE_200 == received_pdu->hdr->code) {
+      printf("Revocation succesful!\n");
+      return 0;
+    } else {
+      printf("Revocation failed!\n");
+      return -1;
+    }
+  }
 }
 
 int revocation_run() {
