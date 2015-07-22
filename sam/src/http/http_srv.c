@@ -43,3 +43,29 @@ void startweb(void) {
   }
   mg_destroy_server(&server);
 }
+
+char *get_client_cert_b64_fingerprint(struct mg_connection *conn) {
+  X509 *cert = SSL_get_peer_certificate(conn->ssl);
+  STACK_OF(X509) *sk = sk_X509_new_null();
+  sk_X509_push(sk, cert);
+
+  if (!cert) {
+    return "";
+  }
+
+  char buf[SHA1LEN];
+  const EVP_MD *digest = EVP_sha1();
+  unsigned len;
+  int rc = X509_digest(cert, digest, (unsigned char *)buf, &len);
+  if (rc == 0 || len != SHA1LEN) {
+    return "";
+  }
+  // Fingerprint to b64
+  size_t b64_length = 0;
+  char *b64_fingerprint = base64_encode(buf, SHA1LEN, &b64_length);
+  b64_fingerprint[b64_length] = '\0';
+
+  X509_free(cert);
+
+  return b64_fingerprint;
+}
