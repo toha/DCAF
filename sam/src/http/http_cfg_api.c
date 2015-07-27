@@ -98,3 +98,96 @@ int handle_resource_owner_request(struct mg_connection *conn,
 
   return mgflag;
 }
+
+
+int api_get_subjects(struct mg_connection *conn) {
+  LIST_HEAD(all_subjects_list, subject) subject_list;
+  LIST_INIT(&subject_list);
+
+  if (0 != dao_get_subjects(&subject_list)) {
+    return MG_FALSE;
+  }
+
+  json_t *j_all_subjects = json_array();
+  struct subject *np;
+  LIST_FOREACH(np, &subject_list, next) {
+    json_t *j_subject;
+    if (0 != subject2json(np, &j_subject)) {
+      return MG_FALSE;
+    }
+    json_array_append(j_all_subjects, j_subject);
+  }
+
+  char *subjectstxt = json_dumps(j_all_subjects, 0);
+  mg_printf_data(conn, "%s", subjectstxt);
+  free(subjectstxt);
+
+  return MG_TRUE;
+}
+
+int api_get_subject(struct mg_connection *conn, char *subjectid) {
+  struct subject c;
+  int subject_result = dao_get_subject(subjectid, &c);
+
+  json_t *j_subject;
+  if (0 == subject_result && 0 == subject2json(&c, &j_subject)) {
+    char *subjecttxt = json_dumps(j_subject, 0);
+    mg_printf_data(conn, "%s", subjecttxt);
+    free(subjecttxt);
+    return MG_TRUE;
+  } else {
+    return MG_FALSE;
+  }
+}
+
+int api_add_or_edit_subject(struct mg_connection *conn, char *subjectid) {
+  struct subject existing_subject;
+  if (0 == dao_get_subject(subjectid, &existing_subject)) {
+    // existing -> update
+    return api_edit_subject(conn, subjectid);
+  } else {
+    // new -> add
+    return api_add_subject(conn, subjectid);
+  }
+}
+
+int api_add_subject(struct mg_connection *conn, char *subjectid) {
+
+  char *postdata = conn->content;
+  json_error_t error;
+  json_t *new_subject = json_loadb(postdata, conn->content_len, 0, &error);
+
+  struct subject c;
+  json2subject(new_subject, &c);
+  int r = dao_add_subject(&c);
+  if (0 == r) {
+    mg_printf_data(conn, "");
+    return MG_TRUE;
+  } else {
+    return MG_FALSE;
+  }
+}
+
+int api_del_subject(struct mg_connection *conn, char *subjectid) {
+  if (0 == dao_del_subject(subjectid)) {
+    mg_printf_data(conn, "");
+    return MG_TRUE;
+  } else {
+    return MG_FALSE;
+  }
+}
+
+int api_edit_subject(struct mg_connection *conn, char *subjectid) {
+  char *postdata = conn->content;
+  json_error_t error;
+  json_t *new_subject = json_loadb(postdata, conn->content_len, 0, &error);
+
+  struct subject c;
+  if (0 == json2subject(new_subject, &c) &&
+      0 == dao_edit_subject(subjectid, &c)) {
+    mg_printf_data(conn, "");
+    return MG_TRUE;
+  } else {
+    return MG_FALSE;
+  }
+}
