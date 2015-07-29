@@ -191,3 +191,96 @@ int api_edit_subject(struct mg_connection *conn, char *subjectid) {
     return MG_FALSE;
   }
 }
+
+
+int api_get_rules(struct mg_connection *conn) {
+  LIST_HEAD(all_rules_list, rule) rule_list;
+  LIST_INIT(&rule_list);
+
+  if (0 != dao_get_rules(&rule_list)) {
+    return MG_FALSE;
+  }
+
+  json_t *j_all_rules = json_array();
+  struct rule *np;
+  LIST_FOREACH(np, &rule_list, next) {
+    json_t *j_rule;
+    if (0 != rule2json(np, &j_rule)) {
+      return MG_FALSE;
+    }
+    json_array_append(j_all_rules, j_rule);
+  }
+
+  char *rulestxt = json_dumps(j_all_rules, 0);
+  mg_printf_data(conn, "%s", rulestxt);
+  free(rulestxt);
+
+  return MG_TRUE;
+}
+
+int api_get_rule(struct mg_connection *conn, char *ruleid) {
+  struct rule r;
+  json_t *j_rule;
+  if (0 == dao_get_rule(ruleid, &r) && 0 == rule2json(&r, &j_rule)) {
+    char *ruletxt = json_dumps(j_rule, 0);
+    mg_printf_data(conn, "%s", ruletxt);
+    free(ruletxt);
+    return MG_TRUE;
+  } else {
+    return MG_FALSE;
+  }
+}
+
+int api_add_or_edit_rule(struct mg_connection *conn, char *ruleid) {
+  struct rule existing_rule;
+  if (0 == dao_get_rule(ruleid, &existing_rule)) {
+    // existing -> update
+    int a = api_edit_rule(conn, ruleid);
+    return a;
+  } else {
+    // new -> add
+    return api_add_rule(conn, ruleid);
+  }
+}
+
+int api_add_rule(struct mg_connection *conn, char *ruleid) {
+  json_t *existing_rule;
+  if (0 == dao_get_rule(ruleid, &existing_rule)) {
+    printf("rule already exists\n");
+    return MG_FALSE;
+  }
+  char *postdata = conn->content;
+  json_error_t error;
+  json_t *j_new_rule = json_loadb(postdata, conn->content_len, 0, &error);
+
+  struct rule new_rule;
+  if (0 == json2rule(j_new_rule, &new_rule) && 0 == dao_add_rule(&new_rule)) {
+    mg_printf_data(conn, "");
+    return MG_TRUE;
+  } else {
+    return MG_FALSE;
+  }
+}
+
+int api_del_rule(struct mg_connection *conn, char *ruleid) {
+  if (0 == dao_del_rule(ruleid)) {
+    mg_printf_data(conn, "");
+    return MG_TRUE;
+  } else {
+    return MG_FALSE;
+  }
+}
+
+int api_edit_rule(struct mg_connection *conn, char *ruleid) {
+  char *postdata = conn->content;
+  json_error_t error;
+  json_t *j_new_rule = json_loadb(postdata, conn->content_len, 0, &error);
+  struct rule new_rule;
+  if (0 == json2rule(j_new_rule, &new_rule) &&
+      0 == dao_edit_rule(ruleid, new_rule)) {
+    mg_printf_data(conn, "");
+    return MG_TRUE;
+  } else {
+    return MG_FALSE;
+  }
+}
