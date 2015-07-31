@@ -334,3 +334,47 @@ int api_add_or_edit_rs(struct mg_connection *conn, char *rsid) {
     return api_add_rs(conn, rsid);
   }
 }
+
+
+int api_add_rs(struct mg_connection *conn, char *rsid) {
+  json_t *existing_rs;
+  if (0 == dao_get_rs(rsid, &existing_rs)) {
+    printf("rs already exists\n");
+    return MG_FALSE;
+  }
+  char *postdata = conn->content;
+  json_error_t error;
+  json_t *j_new_rs = json_loadb(postdata, conn->content_len, 0, &error);
+
+  struct resource_server new_rs;
+  if (0 == json2resource_server(j_new_rs, &new_rs) &&
+      0 == dao_add_rs(&new_rs)) {
+    mg_printf_data(conn, "");
+    return MG_TRUE;
+  } else {
+    return MG_FALSE;
+  }
+}
+
+int api_del_rs(struct mg_connection *conn, char *rsid) {
+  if (0 == dao_del_rs(rsid)) {
+    mg_printf_data(conn, "");
+    return MG_TRUE;
+  } else {
+    return MG_FALSE;
+  }
+}
+
+int api_edit_rs(struct mg_connection *conn, char *rsid) {
+  char *postdata = conn->content;
+  json_error_t error;
+  json_t *j_new_rs = json_loadb(postdata, conn->content_len, 0, &error);
+  struct resource_server new_rs;
+  if (0 == json2resource_server(j_new_rs, &new_rs) &&
+      0 == dao_edit_rs(rsid, &new_rs)) {
+    mg_printf_data(conn, "");
+    return MG_TRUE;
+  } else {
+    return MG_FALSE;
+  }
+}
