@@ -284,3 +284,53 @@ int api_edit_rule(struct mg_connection *conn, char *ruleid) {
     return MG_FALSE;
   }
 }
+
+
+int api_get_allrs(struct mg_connection *conn) {
+  LIST_HEAD(all_rs_list, resource_server) rs_list;
+  LIST_INIT(&rs_list);
+
+  if (0 != dao_get_allrs(&rs_list)) {
+    return MG_FALSE;
+  }
+
+  json_t *j_all_rs = json_array();
+  struct resource_server *np;
+  LIST_FOREACH(np, &rs_list, next) {
+    json_t *j_rs;
+    if (0 != resource_server2json(np, &j_rs)) {
+      return MG_FALSE;
+    }
+    json_array_append(j_all_rs, j_rs);
+  }
+
+  char *rstxt = json_dumps(j_all_rs, 0);
+  mg_printf_data(conn, "%s", rstxt);
+  free(rstxt);
+
+  return MG_TRUE;
+}
+
+int api_get_rs(struct mg_connection *conn, char *rsid) {
+  json_t *j_rs;
+  struct resource_server rs;
+  if (0 == dao_get_rs(rsid, &rs) && 0 == resource_server2json(&rs, &j_rs)) {
+    char *rstxt = json_dumps(j_rs, 0);
+    mg_printf_data(conn, "%s", rstxt);
+    free(rstxt);
+    return MG_TRUE;
+  } else {
+    return MG_FALSE;
+  }
+}
+
+int api_add_or_edit_rs(struct mg_connection *conn, char *rsid) {
+  struct resource_server existing_rs;
+  if (0 == dao_get_rs(rsid, &existing_rs)) {
+    // existing -> update
+    return api_edit_rs(conn, rsid);
+  } else {
+    // new -> add
+    return api_add_rs(conn, rsid);
+  }
+}
