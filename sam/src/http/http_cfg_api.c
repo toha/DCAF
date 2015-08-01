@@ -378,3 +378,43 @@ int api_edit_rs(struct mg_connection *conn, char *rsid) {
     return MG_FALSE;
   }
 }
+
+
+int api_get_tickets(struct mg_connection *conn) {
+  LIST_HEAD(all_tickets_list, dcaf_ticket) ticket_list;
+  LIST_INIT(&ticket_list);
+
+  if (0 != dao_get_tickets(&ticket_list)) {
+    return MG_FALSE;
+  }
+
+  json_t *j_all_tickets = json_array();
+  struct dcaf_ticket *np;
+  LIST_FOREACH(np, &ticket_list, next) {
+    json_t *j_ticket;
+    if (0 != ticket2json(np, &j_ticket)) {
+      return MG_FALSE;
+    }
+    json_array_append(j_all_tickets, j_ticket);
+  }
+
+  char *ticketstxt = json_dumps(j_all_tickets, 0);
+  mg_printf_data(conn, "%s", ticketstxt);
+  free(ticketstxt);
+
+  return MG_TRUE;
+}
+
+int api_get_ticket(struct mg_connection *conn, char *ticketid) {
+  json_t *j_ticket;
+  struct dcaf_ticket ticket;
+  if (0 == dao_get_ticket(ticketid, &ticket) &&
+      0 == ticket2json(&ticket, &j_ticket)) {
+    char *tickettxt = json_dumps(j_ticket, 0);
+    mg_printf_data(conn, "%s", tickettxt);
+    free(tickettxt);
+    return MG_TRUE;
+  } else {
+    return MG_FALSE;
+  }
+}
