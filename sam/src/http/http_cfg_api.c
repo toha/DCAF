@@ -99,7 +99,6 @@ int handle_resource_owner_request(struct mg_connection *conn,
   return mgflag;
 }
 
-
 int api_get_subjects(struct mg_connection *conn) {
   LIST_HEAD(all_subjects_list, subject) subject_list;
   LIST_INIT(&subject_list);
@@ -191,7 +190,6 @@ int api_edit_subject(struct mg_connection *conn, char *subjectid) {
     return MG_FALSE;
   }
 }
-
 
 int api_get_rules(struct mg_connection *conn) {
   LIST_HEAD(all_rules_list, rule) rule_list;
@@ -285,7 +283,6 @@ int api_edit_rule(struct mg_connection *conn, char *ruleid) {
   }
 }
 
-
 int api_get_allrs(struct mg_connection *conn) {
   LIST_HEAD(all_rs_list, resource_server) rs_list;
   LIST_INIT(&rs_list);
@@ -335,7 +332,6 @@ int api_add_or_edit_rs(struct mg_connection *conn, char *rsid) {
   }
 }
 
-
 int api_add_rs(struct mg_connection *conn, char *rsid) {
   json_t *existing_rs;
   if (0 == dao_get_rs(rsid, &existing_rs)) {
@@ -378,7 +374,6 @@ int api_edit_rs(struct mg_connection *conn, char *rsid) {
     return MG_FALSE;
   }
 }
-
 
 int api_get_tickets(struct mg_connection *conn) {
   LIST_HEAD(all_tickets_list, dcaf_ticket) ticket_list;
@@ -441,4 +436,33 @@ int api_get_revocations(struct mg_connection *conn) {
   free(revocationstxt);
 
   return MG_TRUE;
+}
+
+int api_add_revocation(struct mg_connection *conn) {
+  char *postdata = conn->content;
+  json_error_t error;
+  json_t *j_new_revocation = json_loadb(postdata, conn->content_len, 0, &error);
+
+  struct dcaf_revocation new_revocation;
+  if (0 == json2revocation(j_new_revocation, &new_revocation) &&
+      0 == dao_add_revocation(&new_revocation)) {
+    mg_printf_data(conn, "");
+    return MG_TRUE;
+  } else {
+    return MG_FALSE;
+  }
+}
+
+int api_try_commissioning(struct mg_connection *conn) {
+  char *postdata = conn->content;
+  json_error_t error;
+  json_t *j_commissioning = json_loadb(postdata, conn->content_len, 0, &error);
+
+  if (0 == try_send_commissioning(j_commissioning)) {
+    mg_printf_data(conn, "");
+    return MG_TRUE;
+  } else {
+    printf("commissioning: server not reachable\n");
+    return http_send_error(conn, 500, "server not reachable");
+  }
 }
