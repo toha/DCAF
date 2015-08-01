@@ -418,3 +418,27 @@ int api_get_ticket(struct mg_connection *conn, char *ticketid) {
     return MG_FALSE;
   }
 }
+
+int api_get_revocations(struct mg_connection *conn) {
+  LIST_HEAD(all_revocations_list, dcaf_revocation) revocation_list;
+  LIST_INIT(&revocation_list);
+
+  if (0 != dao_get_revocations(&revocation_list)) {
+    return MG_FALSE;
+  }
+  json_t *j_all_revocations = json_array();
+  struct dcaf_revocation *np;
+  LIST_FOREACH(np, &revocation_list, next) {
+    json_t *j_revocation;
+    if (0 != revocation2json(np, &j_revocation)) {
+      return MG_FALSE;
+    }
+    json_array_append(j_all_revocations, j_revocation);
+  }
+
+  char *revocationstxt = json_dumps(j_all_revocations, 0);
+  mg_printf_data(conn, "%s", revocationstxt);
+  free(revocationstxt);
+
+  return MG_TRUE;
+}
