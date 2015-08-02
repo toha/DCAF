@@ -19,5 +19,13 @@ int main() {
 
   dao_init();
 
+  // init configuration api for ROP
+  ro_api_init();
+
+  startweb(); // blocking!
+
+  /* Last thing that main() should do */
+  pthread_exit(NULL);
+
   return 0;
 }
