@@ -119,3 +119,70 @@ int _cbor2ticket_request_message(char *cbordata, size_t cbordata_len,
 
   return 0;
 }
+
+
+int trm_find_matching_rule(struct ticket_request_message *trm,
+                           struct subject *c, struct rule **rule_result,
+                           struct rule_resource **rule_resource_result) {
+  // Testen ob es eine Regel gibt die Zugriff für diese Rolle erlaubt
+  LIST_HEAD(, rule) rule_list;
+  LIST_INIT(&rule_list);
+  if (0 != dao_get_rules(&rule_list)) {
+    return 2;
+  }
+
+  struct rule *rulep;
+  LIST_FOREACH(rulep, &rule_list, next) {
+    if (strcmp(rulep->subject, c->cert_fingerprint)) {
+      continue;
+    }
+
+    if (0 != rulep->expiration_time) {
+      if (0 > rulep->expiration_time - get_timestamp_secs()) {
+        printf("Rule expired\n");
+        continue;
+      }
+    }
+
+    // loop over resources and check if request and methods fits
+    struct rule_resource *resourcep;
+    LIST_FOREACH(resourcep, &rulep->resources, next) {
+
+      int i;
+      int alltrue = 1;
+      for (i = 0; i < trm->ai_length; i++) {
+        if (strcmp(resourcep->rs, trm->AIs[i].rs)) {
+          alltrue = 0;
+          continue;
+        }
+
+        // for implicite authorization skip resource and method-check
+        if (resourcep->resource[0] != '*') {
+
+          if (strcmp(resourcep->resource, trm->AIs[i].resource)) {
+            alltrue = 0;
+            continue;
+          }
+
+          int method_eval = resourcep->methods & trm->AIs[i].methods;
+          if (method_eval != trm->AIs[i].methods) {
+            alltrue = 0;
+            continue;
+          }
+        }
+      }
+
+      if (!alltrue) {
+        continue;
+      }
+      printf("Rule applied!\n");
+
+      *rule_result = rulep;
+      *rule_resource_result = resourcep;
+
+      return 0;
+    }
+  }
+
+  return 1;
+}
