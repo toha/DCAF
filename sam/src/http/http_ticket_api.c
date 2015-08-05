@@ -186,3 +186,55 @@ int trm_find_matching_rule(struct ticket_request_message *trm,
 
   return 1;
 }
+
+
+size_t ticket_face2cbor(struct dcaf_ticket_face *f, cbor_stream_t *stream) {
+
+  // Face structure
+  // face map with length 5
+  if (1 <= f->ai_length && f->AIs[0].resource[0] != '*') {
+    cbor_serialize_map(stream, 5);
+
+    cbor_serialize_int(stream, DCAF_TYPE_SAI);
+    cbor_serialize_array(stream, f->ai_length);
+    int i;
+    for (i = 0; i < f->ai_length; i++) {
+      cbor_serialize_array(stream, 2); // write value 1
+      cbor_serialize_byte_string(stream,
+                                 f->AIs[i].resource); // write array value 1
+      cbor_serialize_int(stream, f->AIs[i].methods);  // write array value 2
+    }
+  } else {
+    cbor_serialize_map(stream, 4);
+  }
+
+  // Timestamp
+  cbor_serialize_int(stream, DCAF_TYPE_TS); // write key face 3
+  cbor_serialize_int(stream, f->timestamp);
+
+  // Lifetime
+  cbor_serialize_int(stream, DCAF_TYPE_L); // write key face 4
+  cbor_serialize_int(stream, f->lifetime); // write value 4
+
+  // PSK-Generation-Method
+  cbor_serialize_int(stream, DCAF_TYPE_G);              // write key face 5
+  cbor_serialize_int(stream, DTLS_PSK_GEN_HMAC_SHA256); // write value 5
+
+  cbor_serialize_int(stream, DCAF_TYPE_SQ);       // write key face 6
+  cbor_serialize_int(stream, f->sequence_number); // write value 6
+
+
+  return stream->pos;
+}
+
+size_t ticket2cbor(struct dcaf_ticket *t, cbor_stream_t *stream) {
+  cbor_serialize_map(stream, 2);           // map of length 2 follows
+  cbor_serialize_int(stream, DCAF_TYPE_F); // write key 1
+
+  ticket_face2cbor(&t->face, stream);
+
+  cbor_serialize_int(stream, DCAF_TYPE_V); // write key 2
+  cbor_serialize_byte_string_len(stream, t->verifier,
+                                 t->verifier_size); // write value 2
+  return stream->pos;
+}
