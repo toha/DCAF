@@ -238,3 +238,36 @@ size_t ticket2cbor(struct dcaf_ticket *t, cbor_stream_t *stream) {
                                  t->verifier_size); // write value 2
   return stream->pos;
 }
+
+size_t ticket_create_verifier(char *rs_secretb64, struct dcaf_ticket_face *f,
+                              unsigned char *v) {
+  // ticket face to cbor for calculation of verifier
+  unsigned char face_as_cbor[DCAF_MAX_FACE];
+  cbor_stream_t face_cbor_stream;
+  cbor_init(&face_cbor_stream, face_as_cbor, sizeof(face_as_cbor));
+  ticket_face2cbor(f, &face_cbor_stream);
+  size_t face_cbor_size = face_cbor_stream.pos;
+  cbor_destroy(&face_cbor_stream);
+
+  // init verifier with 0
+  memset(v, 0, sizeof(v));
+
+  dtls_hmac_context_t *hmac_ctx;
+  unsigned char key[64];
+
+  size_t rs_secret_size = 0;
+  unsigned char *rs_secret =
+      base64_decode(rs_secretb64, strlen(rs_secretb64), &rs_secret_size);
+
+  hmac_ctx = dtls_hmac_new(rs_secret, rs_secret_size);
+  dtls_hmac_update(hmac_ctx, face_as_cbor, face_cbor_size);
+  size_t keylength = dtls_hmac_finalize(hmac_ctx, &key);
+
+  size_t verifier_size = keylength;
+  if (verifier_size > DCAF_MAX_VERIFIER) {
+    verifier_size = DCAF_MAX_VERIFIER;
+  }
+
+  memcpy(v, &key, verifier_size);
+  return verifier_size;
+}
