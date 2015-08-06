@@ -380,5 +380,64 @@ int handle_ticket_request_message(struct mg_connection *conn,
   ticket.face.sequence_number = rs.last_seq_nr;
   rs.last_seq_nr++;
 
+  // verifier
+  ticket.verifier_size =
+      ticket_create_verifier(rs.secret, &ticket.face, ticket.verifier);
+
+  // Ticket 2 cbor
+  unsigned char ticket_cbor[DCAF_MAX_FACE + DCAF_MAX_VERIFIER + 32];
+  cbor_stream_t ticket_cbor_stream;
+  cbor_init(&ticket_cbor_stream, ticket_cbor, sizeof(ticket_cbor));
+  size_t ticket_cbor_size = ticket2cbor(&ticket, &ticket_cbor_stream);
+  hexDump("ticket cbor", ticket_cbor, ticket_cbor_stream.pos);
+
+  // Ticketface 2 cbor
+  unsigned char ticket_cborface[DCAF_MAX_FACE];
+  cbor_stream_t ticket_cbor_face_stream;
+  cbor_init(&ticket_cbor_face_stream, ticket_cborface, sizeof(ticket_cborface));
+  size_t ticket_cbor_face_size =
+      ticket_face2cbor(&ticket.face, &ticket_cbor_face_stream);
+  hexDump("ticket face cbor", ticket_cborface, ticket_cbor_face_stream.pos);
+  printf("---------------------------------------------------\n");
+  if (DCAF_MAX_FACE < ticket_cbor_stream.pos) {
+    return http_send_error(
+        conn, 500,
+        "ticket face too big. reduce resources in authorization information");
+  }
+
+  // derive ticketid from cbor-face-hash
+  char *hash = (char *)malloc(32);
+  unsigned char *ticketid_hex = (char *)malloc(10);
+  memset(hash, 0, 32);
+
+  SHA256_CTX ctx;
+  SHA256_Init(&ctx);
+  SHA256_Update(&ctx, ticket_cborface, ticket_cbor_face_stream.pos);
+  SHA256_Final(hash, &ctx);
+
+  memcpy(ticketid_hex, hash, 10);
+
+  size_t b64_length = 0;
+  char *b64_ticketid = base64_encode(hash, 10, &b64_length);
+  b64_ticketid[b64_length] = '\0';
+  ticket.id = b64_ticketid;
+
+  if (0 != dao_edit_rs(rs.id, &rs)) {
+    return http_send_error(conn, 500, "updating rs failed");
+  }
+
+  // save ticket
+  pthread_mutex_lock(&dao_mutex);
+  if (0 != dao_add_ticket(&ticket)) {
+    pthread_mutex_unlock(&dao_mutex);
+    return http_send_error(conn, 500, "error on adding ticket");
+  }
+  pthread_mutex_unlock(&dao_mutex);
+
+  mg_send_data(conn, ticket_cbor, ticket_cbor_size);
+
+  free(hash);
+  free(ticketid_hex);
+  cbor_destroy(&ticket_cbor_stream);
   return MG_TRUE;
 }
