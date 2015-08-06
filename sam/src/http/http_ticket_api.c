@@ -20,6 +20,7 @@
 
 int _cbor_parse_ticket_request_message(char *postdata, size_t postdata_len,
                                        struct ticket_request_message *trm) {}
+
 size_t ticket_request_message2cbor(struct ticket_request_message *trm,
                                    cbor_stream_t *stream) {
   cbor_serialize_map(stream, 2);
@@ -187,7 +188,6 @@ int trm_find_matching_rule(struct ticket_request_message *trm,
   return 1;
 }
 
-
 size_t ticket_face2cbor(struct dcaf_ticket_face *f, cbor_stream_t *stream) {
 
   // Face structure
@@ -270,4 +270,115 @@ size_t ticket_create_verifier(char *rs_secretb64, struct dcaf_ticket_face *f,
 
   memcpy(v, &key, verifier_size);
   return verifier_size;
+}
+
+int handle_ticket_request_message(struct mg_connection *conn,
+                                  enum mg_event ev) {
+
+  // check content-type
+  if (strcmp(mg_get_header(conn, "Content-Type"), "application/dcaf+cbor")) {
+    return http_send_error(conn, 400, "invalid content-type");
+  }
+
+  struct ticket_request_message trm;
+  int parse_result =
+      _cbor2ticket_request_message(conn->content, conn->content_len, &trm);
+
+  switch (parse_result) {
+  case 1:
+    return http_send_error(conn, 400, "invalid POST data");
+  case 2:
+    return http_send_error(conn, 400,
+                           "one or more required fields are missing");
+  case 3:
+    return http_send_error(conn, 400, "one or more fields are invalid");
+  case 4:
+    return http_send_error(conn, 400, "invalid authorization information");
+  case 5:
+    return http_send_error(conn, 400, "invalid AI uri");
+  default:
+    break;
+  }
+
+  char *b64_fingerprint = get_client_cert_b64_fingerprint(conn);
+  struct subject c;
+  if (0 != dao_get_subject(b64_fingerprint, &c)) {
+    return http_send_error(conn, 400, "subject not found");
+  }
+  struct rule *rulep = NULL;
+  struct rule_resource *rule_resourcep = NULL;
+  int rule_result = trm_find_matching_rule(&trm, &c, &rulep, &rule_resourcep);
+  switch (rule_result) {
+  case 1:
+    printf("No Rule applied!\n");
+    // No rule applied. Empty success response
+    return http_send_error(conn, 200, "");
+  case 2:
+    return http_send_error(conn, 500, "error with rule list");
+  default:
+    break;
+  }
+  if (!rulep || !rule_resourcep) {
+    // strange error - rule applied but pointers not set
+    return http_send_error(conn, 500, "internal server error");
+  }
+
+  struct resource_server rs;
+  if (0 != dao_get_rs(rule_resourcep->rs, &rs)) {
+    return http_send_error(conn, 500, "resource server not found");
+  }
+  struct dcaf_ticket ticket;
+  // face
+  // auth infos - implicit?
+  if (rule_resourcep->resource[0] == '*') {
+    ticket.face.ai_length = 1;
+    ticket.face.AIs[0].rs = rule_resourcep->rs;
+    ticket.face.AIs[0].resource = "*";
+    ticket.face.AIs[0].methods = 15;
+  } else {
+    int j;
+    for (j = 0; j < trm.ai_length; j++) {
+      ticket.face.AIs[j] = trm.AIs[j];
+    }
+    ticket.face.ai_length = trm.ai_length;
+  }
+
+  // Timestamp from request or from sam time
+  if (0 != trm.timestamp) {
+    ticket.face.timestamp = trm.timestamp;
+  } else {
+    ticket.face.timestamp = get_timestamp_secs();
+  }
+
+  // Lifetime in Regel?
+  if (0 != rulep->expiration_time) {
+    unsigned int sec_remaining = rulep->expiration_time - get_timestamp_secs();
+    if (0 > sec_remaining) {
+      ticket.face.lifetime = dao_get_cfg_lifetime();
+    } else {
+      // verbleibende sekunden als lifetime
+      ticket.face.lifetime = sec_remaining;
+    }
+  } else {
+    ticket.face.lifetime = dao_get_cfg_lifetime();
+  }
+
+  // Copy local conditions to ticket
+  LIST_INIT(&ticket.face.conditions);
+  struct rule_condition *condp;
+  LIST_FOREACH(condp, &rulep->conditions, next) {
+    struct rule_condition *newcondp = malloc(sizeof(struct rule_condition));
+    newcondp->data[0] = condp->data[0];
+    newcondp->data[1] = condp->data[1];
+    newcondp->key = (char *)malloc(sizeof(char) * strlen(condp->key));
+    strcpy(newcondp->key, condp->key);
+
+    LIST_INSERT_HEAD(&ticket.face.conditions, newcondp, next);
+  }
+
+  ticket.face.dtls_psk_gen_method = DTLS_PSK_GEN_HMAC_SHA256;
+  ticket.face.sequence_number = rs.last_seq_nr;
+  rs.last_seq_nr++;
+
+  return MG_TRUE;
 }
