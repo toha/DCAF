@@ -1,0 +1,29 @@
+<h2><%= word %> Client Authorization Manager</h2>
+
+<div class="well sammoretopmargin">
+
+
+
+<form role="form">
+    <div class="row">
+        <div class="form-group col-lg-6">
+            <label for="code">Name</label>
+            <input type="text" placeholder="Descriptive Label for this CAM" class="form-control sam_form_subject_name" value="<%= sub.name %>" />
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="form-group col-lg-6 ">
+            <label for="code">SHA1-Fingerprint (as Base64)</label>
+            <input type="text" class="form-control input-normal sam_form_subject_fingerprint" placeholder="The Certificate of this Fingerprint has to be issued or signed by SAMs CA." value="<%= sub.cert_fingerprint %>"  <% if (word === "Update") { %> disabled="disabled" <% } %> />
+        </div>
+    </div>
+    <div class="row">
+    	<div class="form-group col-lg-6 ">
+        <button type="button" class="btn btn-default samformsubmit"><%= word %> CAM</button>
+        </div>
+    </div>
+</form>
+  </div>
+
+
