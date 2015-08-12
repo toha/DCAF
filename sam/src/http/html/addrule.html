@@ -1,0 +1,73 @@
+<h2><%= word %> Rule</h2>
+
+<div class="well sammoretopmargin">
+
+    <form role="form">
+        <div class="row">
+            <div class="form-group col-lg-6">
+                <label for="code">Name</label>
+                <input type="text" placeholder="Descriptive unique Label for this Rule" class="form-control sam_form_rule_id" value="<%= sub.id %>" <% if (word === "Update") { %> disabled="disabled" <% } %> />
+            </div>
+        </div>
+
+        <div class="row">
+            <div class="form-group col-lg-6 ">
+                <label for="code">CAM</label>
+                <select class="form-control sam_form_rule_cam" value="<%= sub.subject %>">
+
+                <% _.each(subjects, function(sub) { %>
+                    <option value="<%= sub.cert_fingerprint %>"><%= sub.name %></option>
+                <% }); %>
+
+                </select>
+            </div>
+        </div>
+        <div class="row">
+            <div class="form-group col-lg-6 ">
+                <label for="code">Expiration Date (YYYY-MM-DDThh:mm:ss, leave default for global lifetime)</label>
+                <input type="datetime-local" class="form-control input-normal sam_form_rule_expiration_date" value="<%= sub.expiration_time %>"  />
+            </div>
+        </div>
+        <div class="row">
+            <div class="form-group col-lg-6 ">
+                <label for="code">Priority</label>
+                <input type="number" class="form-control input-normal sam_form_rule_priority" value="<%= sub.priority %>" min="0" max="65535" />
+            </div>
+        </div>
+        <% if (word === "Update") { %>
+        <div class="row">
+            <div class="form-group col-lg-6 ">
+                <label for="code">Revoke Tickets? </label>
+                <input type="checkbox" class="checkbxrevoke" value="1" />
+            </div>
+        </div>
+        <% } %>
+        <div class="row">
+            <div class="form-group col-lg-6 ">
+                <label for="code">Resources</label>
+            </div>
+        </div>
+        <div class="addserver_resource_container">
+
+        </div>
+        <div class="row">
+            <div class="form-group col-lg-6 ">
+                <button type="button" class="btn btn-primary btn-xs addserver_resource_btn" role="button"><span class="glyphicon glyphicon-plus" aria-hidden="true"></span> Add Resource
+                </button>
+            </div>
+        </div>
+        <div class="row">
+            <div class="form-group col-lg-6 ">
+                <label for="code">Conditions</label>
+                <input type="text" placeholder="Enter conditions as JSON. E.g. [{'key':'timeframe', 'data':[800,1800]}]" class="form-control input-normal sam_form_server_conditions" value="" />
+            </div>
+        </div>
+        <div class="row">
+        	<div class="form-group col-lg-6 ">
+            <button type="button" class="btn btn btn-primary samformsubmit"><%= word %> Access Rule</button>
+            </div>
+        </div>
+    </form>
+</div>
+
+

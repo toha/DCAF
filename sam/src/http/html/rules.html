@@ -1,0 +1,76 @@
+<h2>Access Rules</h2>
+<p>Connecting Subjects and Objects</p>
+<div class="sam_button_row">
+	<a type="submit" class="btn btn-primary" role="button" href="#addRule">
+		<span class="glyphicon glyphicon-plus" aria-hidden="true"></span> Add Rule
+	</a>
+</div>
+
+<table class="table table-hover">
+    <thead>
+      <tr>
+        <th>Name</th>
+        <th>CAM</th>
+        <th>Resources</th>
+        <th>Expiration Date</th>
+        <th>Priority</th>
+        <th>Conditions</th>
+        <th></th>
+      </tr>
+    </thead>
+<tbody>
+
+<% _.each(collection, function(sub) { %>
+
+  <tr class="sam_table_row">
+		<td>
+			<%= sub.id %>
+		</td>
+		<td><%= subjects.byFingerprint(sub.subject)[0].get("name") %></td>
+		<td>
+		<%
+		function methods2String(methods) {
+			var r = "";
+			if ((methods&1) === 1) { r += "GET, "; }
+			if ((methods&2) === 2) { r += "POST, "; }
+			if ((methods&4) === 4) { r += "PUT, "; }
+			if ((methods&8) === 8) { r += "DELETE, "; }
+			return r.substring(0, r.length-2);;
+		}
+
+			_.each(sub.resources, function(res) {
+		%>
+				coaps://[<%= res.rs %>]/<%= res.resource %> (<%= methods2String(res.methods) %>) </br>
+
+			<% }); %>
+
+
+		</td>
+		<td>
+			<% if (sub.expiration_time === 0) { %>
+				none
+			<% } else {
+				var d = new date(sub.expiration_time*1000).format("yyyy-mm-dd'T'HH:MM:ss");
+			%>
+				<%= d %>
+			<% } %>
+		</td>
+		<td><%= sub.priority %></td>
+		<td>
+		</td>
+	  <td>
+			<a type="submit" class="btn btn-primary btn-xs"  href="#editRule/<%= sub.id %>">
+		  		<span class="glyphicon glyphicon-pencil" aria-hidden="true"></span>
+			</a>
+			<a type="submit" class="btn btn-primary btn-xs" href="#deleteRule/<%= sub.id %>">
+				<span class="glyphicon glyphicon-trash" aria-hidden="true"></span>
+			</a>
+	  </td>
+  </tr>
+
+<% }); %>
+
+
+
+</tbody>
+</table>

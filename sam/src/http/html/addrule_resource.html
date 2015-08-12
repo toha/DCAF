@@ -1,0 +1,44 @@
+<div class="addserverresourcediv">
+    <div class="row">
+        <div class="form-group col-lg-4">
+            <label for="code"><button type="button" class="btn btn-primary btn-xs addserverresdelbtn"  href=""> <span class="glyphicon glyphicon-trash" aria-hidden="true"></span></button> Server</label>
+            <select class="form-control sam_form_server_res_server" value="<%= res.rs %>">
+
+            <% _.each(servers, function(sub) { %>
+                <option><%= sub.id %></option>
+
+
+            <% }); %>
+
+            </select>
+
+        </div>
+    </div>
+    <div class="row">
+        <div class="form-group col-lg-4">
+            <label for="code">Ressource-URI</label>
+            <select class="form-control sam_form_server_res_uri" value="<%= res.resource %>">
+                <option value="*">All Resources</option>
+            </select>
+        </div>
+    </div>
+    <div class="row">
+        <div class="form-group col-lg-6 ">
+            <label for="code">Allowed Methods</label>
+            <div>
+                <label class="checkbox-inline">
+                  <input type="checkbox" class="checkbxGet" value="option1" <% if ((res.methods&1) === 1) { %> checked <% } %>> GET
+                </label>
+                <label class="checkbox-inline">
+                  <input type="checkbox" class="checkbxPost" value="option2" <% if ((res.methods&2) === 2) { %> checked <% } %>> POST
+                </label>
+                <label class="checkbox-inline">
+                  <input type="checkbox" class="checkbxPut" value="option3" <% if ((res.methods&4) === 4) { %> checked <% } %>> PUT
+                </label>
+                <label class="checkbox-inline">
+                  <input type="checkbox" class="checkbxDel" value="option3" <% if ((res.methods&8) === 8) { %> checked <% } %>> DELETE
+                </label>
+            </div>
+        </div>
+    </div>
+</div>
