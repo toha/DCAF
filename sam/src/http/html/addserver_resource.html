@@ -1,0 +1,27 @@
+<div class="addserverresourcediv">
+    <div class="row">
+        <div class="form-group col-lg-4">
+            <label for="code"><button type="button" class="btn btn-primary btn-xs addserverresdelbtn"  href=""> <span class="glyphicon glyphicon-trash" aria-hidden="true"></span></button> URI</label>
+            <input type="text" class="form-control input-normal sam_form_server_res_uri" value="<%= res.resource %>"/>
+        </div>
+    </div>
+    <div class="row">
+        <div class="form-group col-lg-6 ">
+            <label for="code">Supported Methods</label>
+            <div>
+                <label class="checkbox-inline">
+                  <input type="checkbox" class="checkbxGet" value="option1" <% if ((res.methods&1) === 1) { %> checked <% } %>> GET
+                </label>
+                <label class="checkbox-inline">
+                  <input type="checkbox" class="checkbxPost" value="option2" <% if ((res.methods&2) === 2) { %> checked <% } %>> POST
+                </label>
+                <label class="checkbox-inline">
+                  <input type="checkbox" class="checkbxPut" value="option3" <% if ((res.methods&4) === 4) { %> checked <% } %>> PUT
+                </label>
+                <label class="checkbox-inline">
+                  <input type="checkbox" class="checkbxDel" value="option3" <% if ((res.methods&8) === 8) { %> checked <% } %>> DELETE
+                </label>
+            </div>
+        </div>
+    </div>
+</div>

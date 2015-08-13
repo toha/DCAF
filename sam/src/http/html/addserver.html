@@ -1,0 +1,47 @@
+<h2><%= word %> Server</h2>
+
+<div class="well sammoretopmargin">
+
+    <form role="form">
+        <div class="row">
+            <div class="form-group col-lg-6">
+                <label for="code">Hostname or IPv6 Address without square brackets</label>
+                <input type="text" class="form-control sam_form_server_id" value="<%= sub.id %>" <% if (word === "Update") { %> disabled="disabled" <% } %> />
+            </div>
+        </div>
+
+        <div class="row">
+            <div class="form-group col-lg-6 ">
+                <label for="code">Secret</label>
+                <input type="text" class="form-control input-normal sam_form_server_secret" value="<% if (word === "Update") { %> *** <% } %> "  <% if (word === "Update") { %> disabled="disabled" <% } %> />
+            </div>
+        </div>
+        <div class="row">
+            <div class="form-group col-lg-6 ">
+                <label for="code">Resources</label>
+            </div>
+        </div>
+        <div class="addserver_resource_container">
+
+        </div>
+        <div class="row">
+            <div class="form-group col-lg-6 ">
+                <button type="button" class="btn btn-primary btn-xs addserver_resource_btn" role="button"><span class="glyphicon glyphicon-plus" aria-hidden="true"></span> Add Resource
+                </button>
+            </div>
+        </div>
+        <div class="row">
+            <div class="form-group col-lg-6 ">
+                <label for="code">Conditions</label>
+                <input type="text" class="form-control input-normal sam_form_server_conditions" value="" placeholder="comma separated list of condition keys (eg. timeframe)" />
+            </div>
+        </div>
+        <div class="row">
+        	<div class="form-group col-lg-6 ">
+            <button type="button" class="btn btn btn-primary samformsubmit"><%= word %> Server</button>
+            </div>
+        </div>
+    </form>
+</div>
+
+
