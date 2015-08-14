@@ -1,0 +1,73 @@
+<h2>Issued Tickets</h2>
+<div class="sam_button_row">
+
+</div>
+
+<table class="table table-hover">
+    <thead>
+      <tr>
+        <th>Server</th>
+        <th>Sequence Number</th>
+        <th>Resources</th>
+        <th>Timestamp</th>
+        <th>Lifetime</th>
+        <th>Conditions</th>
+        <th>Verifier</th>
+        <th></th>
+      </tr>
+    </thead>
+<tbody>
+
+<% _.each(collection, function(sub) { %>
+
+  <tr class="sam_table_row">
+		<td>
+			<% if(sub.face.AI[0]) { %>
+				<%= sub.face.AI[0].rs %>
+			<% } else { %>
+				-
+			<% } %>
+		</td>
+		<td><%= sub.face.sequence_number %></td>
+		<td>
+		<%
+		function methods2String(methods) {
+			var r = "";
+			if ((methods&1) === 1) { r += "GET, "; }
+			if ((methods&2) === 2) { r += "POST, "; }
+			if ((methods&4) === 4) { r += "PUT, "; }
+			if ((methods&8) === 8) { r += "DELETE, "; }
+			return r.substring(0, r.length-2);;
+		}
+
+			_.each(sub.face.AI, function(ai) {
+		%>
+				/<%= ai.resource %> (<%= methods2String(ai.methods) %>) </br>
+
+			<% }); %>
+
+
+		</td>
+		<td><%= sub.face.timestamp %></td>
+		<td><%= sub.face.lifetime %></td>
+		<td>
+
+			<% if (sub.face.conditions.length == 0) { %> keine <%} else { _.each(sub.face.conditions, function(con) { %>
+				<%= con.key %> <!-- -->
+			<% }); } %>
+
+		</td>
+	  <td><span class="text-muted">saved on sam</span></td>
+	  <td>
+			<a type="submit" class="btn btn-primary btn-xs" role="button" href="#addRevocation/<%= sub.id %>">
+				<span class="glyphicon glyphicon-remove" aria-hidden="true"></span> Revoke
+			</a>
+	  </td>
+  </tr>
+
+<% }); %>
+
+
+
+</tbody>
+</table>

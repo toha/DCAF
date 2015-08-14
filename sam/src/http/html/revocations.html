@@ -1,0 +1,90 @@
+<h2>Ticket Revocations</h2>
+<div class="sam_button_row">
+
+</div>
+
+<table class="table table-hover">
+    <thead>
+      <tr>
+        <th>Ticket SeqNr</th>
+        <th>Resources</th>
+        <th>State</th>
+        <th>Tries</th>
+        <th>Last Try</th>
+        <th>Next Try</th>
+      </tr>
+    </thead>
+<tbody>
+
+<% _.each(collection, function(sub) { %>
+
+  <tr class="sam_table_row">
+		<td>
+			<%= sub.ticket.face.sequence_number %>
+		</td>
+		<td>
+		<%
+		function methods2String(methods) {
+			var r = "";
+			if ((methods&1) === 1) { r += "GET, "; }
+			if ((methods&2) === 2) { r += "POST, "; }
+			if ((methods&4) === 4) { r += "PUT, "; }
+			if ((methods&8) === 8) { r += "DELETE, "; }
+			return r.substring(0, r.length-2);;
+		}
+
+			_.each(sub.ticket.face.AI, function(ai) {
+		%>
+				/<%= ai.resource %> (<%= methods2String(ai.methods) %>) </br>
+
+			<% }); %>
+
+		</td>
+		<td>
+
+			<% if (sub.delivery_time === 0) { %>
+				<button class="btn btn-warning btn-xs"><span class="glyphicon glyphicon-refresh glyphicon-refresh-animate"></span> Pending...</button>
+			<% } else { %>
+				<a class="btn btn-default btn-xs"><span class="glyphicon glyphicon-ok"></span> Delivered</a>
+
+			<% } %>
+		</td>
+		<td>
+
+			<% if (sub.delivery_time === 0) { %>
+				<%= sub.tries %>
+			<% } else { %>
+				-
+			<% } %>
+
+		</td>
+		<td>
+		<%
+		var now = Date.now() / 1000 | 0;
+		var gone = now - sub.last_try;
+		var nex = Math.pow(2, sub.tries) - gone;
+		%>
+		<% if (sub.delivery_time === 0) { %>
+			<%= gone %> secs ago
+		<% } else { %>
+			-
+		<% } %>
+
+		</td>
+		<td>
+		<% if (sub.delivery_time === 0) { %>
+			In <%= nex %> secs
+		<% } else { %>
+			-
+		<% } %>
+
+		</td>
+
+  </tr>
+
+<% }); %>
+
+
+
+</tbody>
+</table>
