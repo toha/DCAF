@@ -117,3 +117,57 @@ static uint8_t dcaf_ticket_verifier[DCAF_MAX_VERIFIER];
 static size_t dcaf_ticket_verifier_length = 0;
 
 static int server_connected = 0;
+
+struct dcaf_msg_hnd {
+  session_t dst;
+  unsigned short msg_id;
+  void (*hnd)(struct coap_context_t *ctx,
+              const coap_endpoint_t *local_interface,
+              const coap_address_t *remote, coap_pdu_t *sent,
+              coap_pdu_t *received, const coap_tid_t id);
+};
+
+static struct dcaf_msg_hnd msg_state;
+
+#ifdef DCAF_TIME
+struct energy_time {
+  unsigned short source;
+  long cpu;
+  long lpm;
+  long transmit;
+  long listen;
+};
+
+static struct energy_time server_last;
+static struct energy_time server_diff;
+static struct energy_time server_last2;
+static struct energy_time server_diff2;
+#endif
+
+static int get_psk_key(struct dtls_context_t *ctx, const session_t *sess,
+                       const unsigned char *id, size_t id_len,
+                       const dtls_psk_key_t **result) {
+
+#ifndef NDEBUG
+  printf("call: get_psk_key\n");
+#endif
+
+  if (uip_ipaddr_cmp(&sess->addr, &cam_dst.addr)) {
+    static const dtls_psk_key_t cam_psk = {
+        .id = (unsigned char *)DCAF_CAM_ID,
+        .id_length = DCAF_CAM_ID_LENGTH,
+        .key = (unsigned char *)DCAF_CAM_SECRET,
+        .key_length = DCAF_CAM_SECRET_LENGTH};
+    *result = &cam_psk;
+  } else {
+
+    static dtls_psk_key_t server_psk;
+    server_psk.id = (unsigned char *)dcaf_ticket_face;
+    server_psk.id_length = dcaf_ticket_face_length;
+    server_psk.key = (unsigned char *)dcaf_ticket_verifier;
+    server_psk.key_length = dcaf_ticket_verifier_length;
+
+    *result = &server_psk;
+  }
+  return 0;
+}
