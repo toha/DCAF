@@ -171,3 +171,50 @@ static int get_psk_key(struct dtls_context_t *ctx, const session_t *sess,
   }
   return 0;
 }
+
+
+PROCESS(dcaf_c1_process, "dcaf_c1_process");
+AUTOSTART_PROCESSES(&dcaf_c1_process);
+PROCESS_THREAD(dcaf_c1_process, ev, data) {
+  PROCESS_BEGIN();
+  dtls_init();
+  init_network();
+
+  if (!dcaf_dtls_context) {
+    dtls_emerg("cannot create context\n");
+    PROCESS_EXIT();
+  }
+
+#ifdef ENABLE_POWERTRACE
+  powertrace_start(CLOCK_SECOND * 2);
+#endif
+
+  etimer_set(&et, TOGGLE_INTERVAL * CLOCK_SECOND);
+  etimer_set(&et2, TOGGLE_INTERVAL2 * CLOCK_SECOND);
+
+  while (1) {
+    PROCESS_YIELD();
+    if (ev == tcpip_event) {
+
+#ifndef NDEBUG
+      printf("event: TCPIP-EVENT\n");
+#endif
+      handle_tcpip_event();
+    } else if (etimer_expired(&et2)) {
+      if (server_connected == 1) {
+#if !defined(NDEBUG) || defined(DCAF_DEBUG)
+        printf("C->S: send authorized resource request /temp/1\n");
+#endif
+        send_authorized_resource_request();
+      }
+      etimer_reset(&et2);
+
+    } else if (etimer_expired(&et)) {
+#if !defined(NDEBUG) || defined(DCAF_DEBUG)
+      printf("C->S: send unauthorized resource request\n");
+#endif
+      send_unauthorized_resource_request();
+    }
+  }
+  PROCESS_END();
+}
