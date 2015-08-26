@@ -172,6 +172,74 @@ static int get_psk_key(struct dtls_context_t *ctx, const session_t *sess,
   return 0;
 }
 
+static void send_authorized_resource_request() {
+#ifdef DCAF_TIME
+  server_last.cpu = energest_type_time(ENERGEST_TYPE_CPU);
+  server_last2.cpu = energest_type_time(ENERGEST_TYPE_CPU);
+#endif
+
+  coap_pdu_t *pdu;
+  create_coap_message(handle_server_response, DCAF_RS1_URI, DCAF_RS1_URI_LENGTH,
+                      1, &pdu);
+
+  coap_send_confirmed(dcaf_coap_context, dcaf_coap_context->endpoint,
+                      (coap_address_t *)(&server_dst), pdu);
+  coap_free(pdu);
+#ifdef DCAF_TIME
+  server_diff.cpu = energest_type_time(ENERGEST_TYPE_CPU) - server_last.cpu;
+  printf("Time create and send authorized resource request: %li\n",
+#endif
+}
+
+static void send_unauthorized_resource_request() {
+#ifdef DCAF_TIME
+  server_last.cpu = energest_type_time(ENERGEST_TYPE_CPU);
+#endif
+
+  coap_pdu_t *pdu;
+  create_coap_message(handle_sam_information_response, DCAF_RS1_URI,
+                      DCAF_RS1_URI_LENGTH, 1, &pdu);
+
+  coap_send_confirmed(dcaf_coap_context, dcaf_coap_context->endpoint,
+                      (coap_address_t *)(&server_dst_nocrypt), pdu);
+  coap_free(pdu);
+#ifdef DCAF_TIME
+  server_diff.cpu = energest_type_time(ENERGEST_TYPE_CPU) - server_last.cpu;
+  printf("Time: create and send unauthorized resource request: %li\n",
+         server_diff.cpu);
+#endif
+}
+
+static int dtls_event(struct dtls_context_t *ctx, session_t *sess,
+                      dtls_alert_level_t level, unsigned short code) {
+
+#ifndef NDEBUG
+  printf("call: dtls_event\n");
+#endif
+
+  if (level == 0 && code == DTLS_EVENT_CONNECTED) {
+    if (uip_ipaddr_cmp(&sess->addr, &cam_dst.addr)) {
+#if !defined(NDEBUG) || defined(DCAF_DEBUG)
+      printf("C<->CAM: dtls connection established\n");
+#endif
+
+#if !defined(NDEBUG) || defined(DCAF_DEBUG)
+      printf("C->CAM: send access request\n");
+#endif
+      send_cam_request();
+    } else {
+
+      server_connected = 1;
+#if !defined(NDEBUG) || defined(DCAF_DEBUG)
+      printf("C<->S: dtls connection established\n");
+      printf("C->S: send authorized resource request /temp/1\n");
+#endif
+      send_authorized_resource_request();
+    }
+  }
+
+  return 0;
+}
 
 PROCESS(dcaf_c1_process, "dcaf_c1_process");
 AUTOSTART_PROCESSES(&dcaf_c1_process);
