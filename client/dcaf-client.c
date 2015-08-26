@@ -172,6 +172,59 @@ static int get_psk_key(struct dtls_context_t *ctx, const session_t *sess,
   return 0;
 }
 
+static void handle_server_response(struct coap_context_t *ctx,
+                                   const coap_endpoint_t *local_interface,
+                                   const coap_address_t *remote,
+                                   coap_pdu_t *sent, coap_pdu_t *received,
+                                   const coap_tid_t id) {
+
+#if !defined(NDEBUG) || defined(DCAF_DEBUG)
+  printf("C<-S: got resource response\n");
+#endif
+#ifdef DCAF_TIME
+  server_last.cpu = energest_type_time(ENERGEST_TYPE_CPU);
+#endif
+
+  char buffer[10];
+  size_t payload_len;
+  unsigned char *payload;
+  if (!coap_get_data(received, &payload_len, &payload) || 0 >= payload_len) {
+    return;
+  }
+#ifdef DCAF_TIME
+  server_diff2.cpu = energest_type_time(ENERGEST_TYPE_CPU) - server_last2.cpu;
+  printf("Time: complete authorized resource request: %li\n", server_diff2.cpu);
+#endif
+
+  if (payload_len < 10) {
+    strncpy(buffer, payload, payload_len);
+    buffer[payload_len] = '\0';
+
+    printf("C: sensor value: %s C\n", buffer);
+  }
+}
+
+static void send_cam_request() {
+#ifdef DCAF_TIME
+  server_last.cpu = energest_type_time(ENERGEST_TYPE_CPU);
+#endif
+
+  coap_pdu_t *pdu;
+  create_coap_message(handle_cam_response, DCAF_CAM1_URI, DCAF_CAM1_URI_LENGTH,
+                      2, &pdu);
+
+  coap_add_data(pdu, dcaf_access_request_payload_length,
+                dcaf_access_request_payload);
+  coap_send_confirmed(dcaf_coap_context, dcaf_coap_context->endpoint,
+                      (coap_address_t *)(&cam_dst), pdu);
+  coap_free(pdu);
+#ifdef DCAF_TIME
+  server_diff.cpu = energest_type_time(ENERGEST_TYPE_CPU) - server_last.cpu;
+  printf("Time create and send cam request: %li\n", server_diff.cpu);
+#endif
+}
+
+
 static void send_authorized_resource_request() {
 #ifdef DCAF_TIME
   server_last.cpu = energest_type_time(ENERGEST_TYPE_CPU);
