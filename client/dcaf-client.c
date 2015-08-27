@@ -172,6 +172,78 @@ static int get_psk_key(struct dtls_context_t *ctx, const session_t *sess,
   return 0;
 }
 
+static void connect_cam() { dtls_connect(dcaf_dtls_context, &cam_dst); }
+
+static void
+handle_sam_information_response(struct coap_context_t *ctx,
+                                const coap_endpoint_t *local_interface,
+                                const coap_address_t *remote, coap_pdu_t *sent,
+                                coap_pdu_t *received, const coap_tid_t id) {
+#if !defined(NDEBUG) || defined(DCAF_DEBUG)
+  printf("C<-S: got sam information message\n");
+#endif
+#ifdef DCAF_TIME
+  server_last.cpu = energest_type_time(ENERGEST_TYPE_CPU);
+#endif
+
+  size_t payload_len;
+  unsigned char *payload;
+  if (!coap_get_data(received, &payload_len, &payload) || 0 >= payload_len) {
+    return;
+  }
+
+  const cn_cbor *samicb;
+  samicb = cn_cbor_decode((char *)payload, payload_len, NULL);
+
+  if (!samicb || samicb->type != CN_CBOR_MAP) {
+#ifndef NDEBUG
+    printf("no cbor in sam information message found\n");
+#endif
+    return;
+  }
+
+  const cn_cbor *sam = cn_cbor_mapget_int(samicb, DCAF_TYPE_SAM);
+  const cn_cbor *ts = cn_cbor_mapget_int(samicb, DCAF_TYPE_TS);
+
+  cn_cbor *map;
+  map = cn_cbor_map_create(NULL);
+  cn_cbor_mapput_int(map, DCAF_TYPE_SAM, sam, NULL);
+  cn_cbor *sai_auth_list = cn_cbor_array_create(NULL);
+  cn_cbor *auth_list = cn_cbor_array_create(NULL);
+  cn_cbor *auth_list_uri = cn_cbor_string_create(DCAF_RS1_URI, NULL);
+  cn_cbor *auth_list_methods = cn_cbor_int_create(1, NULL);
+  cn_cbor_array_append(auth_list, auth_list_uri, NULL);
+  cn_cbor_array_append(auth_list, auth_list_methods, NULL);
+  cn_cbor_array_append(sai_auth_list, auth_list, NULL);
+  cn_cbor_mapput_int(map, DCAF_TYPE_SAI, sai_auth_list, NULL);
+  cn_cbor_mapput_int(map, DCAF_TYPE_TS, ts, NULL);
+
+  dcaf_access_request_payload_length = cbor_encoder_write(
+      dcaf_access_request_payload, 0, DCAF_MAX_ACCESS_REQUEST_CBOR, map);
+
+#ifndef NDEBUG
+  printf("created cbor access request (%d Byte):\n",
+         dcaf_access_request_payload_length);
+  hexdump(dcaf_access_request_payload, dcaf_access_request_payload_length);
+#endif
+
+  free(auth_list_uri->v.str);
+  free(map);
+// cn_cbor_free(samicb);
+
+#ifdef DCAF_TIME
+  server_diff.cpu = energest_type_time(ENERGEST_TYPE_CPU) - server_last.cpu;
+  printf("Time: handle sam information message: %li\n", server_diff.cpu);
+#endif
+
+// Next connect to cam
+// start DTLS-Handshake with CAM
+#if !defined(NDEBUG) || defined(DCAF_DEBUG)
+  printf("C->CAM: start dtls handshake\n");
+#endif
+  connect_cam();
+}
+
 static void handle_server_response(struct coap_context_t *ctx,
                                    const coap_endpoint_t *local_interface,
                                    const coap_address_t *remote,
