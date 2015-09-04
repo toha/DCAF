@@ -140,6 +140,60 @@ static struct energy_time server_last2;
 static struct energy_time server_diff2;
 #endif
 
+static void print_local_addresses(void) {
+  int i;
+  uint8_t state;
+
+  for (i = 0; i < UIP_DS6_ADDR_NB; i++) {
+    state = uip_ds6_if.addr_list[i].state;
+    if (uip_ds6_if.addr_list[i].isused &&
+        (state == ADDR_TENTATIVE || state == ADDR_PREFERRED)) {
+      PRINT6ADDR(&uip_ds6_if.addr_list[i].ipaddr);
+      printf("\n");
+    }
+  }
+}
+
+static void init_network() {
+#ifndef NDEBUG
+  printf("call: init_network\n");
+#endif
+
+  static dtls_handler_t dtls_cb = {
+      .write = dtls_send_to_peer,
+      .read = dtls_read_from_peer,
+      .event = dtls_event,
+      .get_psk_key = get_psk_key,
+  };
+  uip_ipaddr_t ipaddr;
+#ifndef NDEBUG
+  printf("dtls server started\n");
+#endif
+  /* set the network prefix to aaaa::/64 and generate EUI-64 address
+   * from our L2 address */
+  uip_ip6addr(&ipaddr, 0xaaaa, 0, 0, 0, 0x200, 0, 0, 0);
+  uip_ds6_set_addr_iid(&ipaddr, &uip_lladdr);
+  uip_ds6_addr_add(&ipaddr, 0, ADDR_AUTOCONF);
+
+  context.dtls_conn = udp_new(NULL, 0, NULL);
+  udp_bind(context.dtls_conn, uip_htons(COAPS_DEFAULT_PORT));
+
+  context.dtls_context = dtls_new_context(context.dtls_conn);
+  if (context.dtls_context) {
+    dtls_set_handler(context.dtls_context, &dtls_cb);
+  }
+
+  coap_address_t ca;
+  coap_address_init(&ca);
+  uip_ipaddr_copy(&ca.addr, &ipaddr);
+  ca.port = uip_htons(COAP_DEFAULT_PORT);
+  ca.size = sizeof(ca.addr) + sizeof(ca.port);
+
+  context.coap_context = coap_new_context(&ca);
+  context.coap_context->network_send = dcaf_network_send;
+
+  init_resources(context.coap_context);
+}
 
 
 PROCESS(dcaf_rs1_process, "dcaf_rs1_process");
