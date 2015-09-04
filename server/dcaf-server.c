@@ -139,3 +139,37 @@ static struct energy_time server_diff;
 static struct energy_time server_last2;
 static struct energy_time server_diff2;
 #endif
+
+
+
+PROCESS(dcaf_rs1_process, "dcaf_rs1_process");
+AUTOSTART_PROCESSES(&dcaf_rs1_process);
+
+PROCESS_THREAD(dcaf_rs1_process, ev, data) {
+  PROCESS_BEGIN();
+
+  dtls_init();
+  init_network();
+  print_local_addresses();
+
+  if (!context.dtls_context) {
+    dtls_emerg("cannot create context\n");
+    PROCESS_EXIT();
+  }
+
+#ifdef ENABLE_POWERTRACE
+  powertrace_start(CLOCK_SECOND * 2);
+#endif
+
+  while (1) {
+    PROCESS_WAIT_EVENT();
+    if (ev == tcpip_event) {
+#ifndef NDEBUG
+      printf("event: TCPIP-EVENT\n");
+#endif
+      handle_tcpip_event();
+    }
+  }
+
+  PROCESS_END();
+}
