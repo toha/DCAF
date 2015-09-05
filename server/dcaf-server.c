@@ -140,6 +140,86 @@ static struct energy_time server_last2;
 static struct energy_time server_diff2;
 #endif
 
+/**
+* tinydtls handler which will be called to read network data
+*/
+static int dtls_read_from_peer(struct dtls_context_t *ctx, session_t *session,
+                               uint8 *data, size_t len) {
+#ifndef NDEBUG
+  printf("call: dtls_read_from_peer\n");
+#endif
+  coap_packet_t *packet;
+  packet = (coap_packet_t *)custom_coap_malloc_packet();
+  coap_address_init(&(packet)->dst); /* the local interface address */
+  coap_address_init(&(packet)->src); /* the remote peer */
+
+  uip_ipaddr_copy(&packet->src.addr, &UIP_IP_BUF->srcipaddr);
+  packet->src.port = UIP_UDP_BUF->srcport;
+  uip_ipaddr_copy(&packet->dst.addr, &UIP_IP_BUF->destipaddr);
+  packet->dst.port = UIP_UDP_BUF->destport;
+
+  packet->length = len;
+  memcpy(&packet->payload, data, len);
+
+#ifdef DCAF_TIME
+  server_last.cpu = energest_type_time(ENERGEST_TYPE_CPU);
+#endif
+
+  int a = coap_handle_message(context.coap_context,
+                              context.coap_context->endpoint, packet);
+  coap_free_packet(packet);
+
+  return a;
+}
+
+/**
+* tinydtls handler which will be called to route data to contiki
+*/
+static int dtls_send_to_peer(struct dtls_context_t *ctx, session_t *sess,
+                             uint8 *data, size_t len) {
+#ifndef NDEBUG
+  printf("call: dtls_send_to_peer\n");
+#endif
+  struct uip_udp_conn *conn = (struct uip_udp_conn *)dtls_get_app_data(ctx);
+  uip_ipaddr_copy(&conn->ripaddr, &sess->addr);
+  conn->rport = sess->port;
+  uip_udp_packet_send(conn, data, len);
+
+  /* Restore server connection to allow data from any node */
+  memset(&conn->ripaddr, 0, sizeof(conn->ripaddr));
+  memset(&conn->rport, 0, sizeof(conn->rport));
+
+  return len;
+}
+
+static void dtls_handle_read(dtls_context_t *ctx) {
+#ifndef NDEBUG
+  printf("call: dtls_handle_read\n");
+#endif
+  session_t session;
+  memset(&session, 0, sizeof(session_t));
+  uip_ipaddr_copy(&session.addr, &UIP_IP_BUF->srcipaddr);
+  session.port = UIP_UDP_BUF->srcport;
+  session.size = sizeof(session.addr) + sizeof(session.port);
+
+  dtls_handle_message(ctx, &session, uip_appdata, uip_datalen());
+}
+
+static void handle_tcpip_event() {
+#ifndef NDEBUG
+  printf("call: handle_tcpip_event\n");
+#endif
+  if (uip_newdata()) {
+    uint16_t destport = uip_htons(UIP_UDP_BUF->destport);
+    if (COAP_DEFAULT_PORT == destport) {
+      coap_read(context.coap_context);
+    } else {
+      dtls_handle_read(context.dtls_context);
+    }
+  }
+}
+
+
 static void print_local_addresses(void) {
   int i;
   uint8_t state;
@@ -153,6 +233,8 @@ static void print_local_addresses(void) {
     }
   }
 }
+
+
 
 static void init_network() {
 #ifndef NDEBUG
