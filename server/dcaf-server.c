@@ -141,6 +141,133 @@ static struct energy_time server_diff2;
 #endif
 
 /**
+* tinydtls handler to get psk
+*/
+static int get_psk_key(struct dtls_context_t *ctx, const session_t *sess,
+                       const unsigned char *id, size_t id_len,
+                       const dtls_psk_key_t **result) {
+#ifndef NDEBUG
+  printf("call: get_psk_key\n");
+  printf("client id = (%d Byte)\n", id_len);
+  hexdump(id, id_len);
+#endif
+#ifdef DCAF_TIME
+  server_last.cpu = energest_type_time(ENERGEST_TYPE_CPU);
+#endif
+
+  if (3 <= id_len && 0 == strncmp("sam", id, 3)) {
+    // Its SAM! Use key K(SAM,S)
+    static dtls_psk_key_t sam_psk;
+    sam_psk.key = (unsigned char *)dcaf_sam_secret;
+    sam_psk.key_length = dcaf_sam_secret_size;
+    *result = &sam_psk;
+
+#ifndef NDEBUG
+    printf("using k(SAM,S) as psk\n");
+#endif
+
+    return 0;
+  }
+
+  static unsigned char verifier[DTLS_HMAC_DIGEST_SIZE];
+  static dtls_psk_key_t psk = {.key = verifier};
+
+  dtls_hmac_context_t *hmac_ctx; // for ticket verifier generation
+
+  if (DCAF_MAX_FACE < id_len) {
+#ifndef NDEBUG
+    printf("ticket face too long\n");
+#endif
+    *result = NULL;
+    return -1;
+  }
+
+  struct ticket_store_entry *found_ticket = NULL;
+  // Perform sanity checks before overwriting our internal key.
+  if (id_len == 0) {
+#ifndef NDEBUG
+    printf("ticket face empty\n");
+#endif
+
+    if (0 != get_ticket_face(sess, &found_ticket) || found_ticket == NULL) {
+#ifndef NDEBUG
+      printf("ticket not found\n");
+#endif
+      *result = NULL;
+      return -1;
+    }
+  } else {
+#ifndef NDEBUG
+    printf("ticket face not empty\n");
+#endif
+    if (0 != get_ticket_face(sess, &found_ticket) && found_ticket == NULL) {
+// create ticket and save
+#ifndef NDEBUG
+      printf("save ticket\n");
+#endif
+      // save face in ticket store
+      found_ticket = &ticket_faces[ticket_store_ptr];
+      memset(found_ticket, 0, sizeof(struct ticket_store_entry));
+
+      found_ticket->session = sess;
+      memcpy(found_ticket->face_data, id, id_len);
+      found_ticket->face_len = id_len;
+      found_ticket->cn_face = NULL;
+
+      if (ticket_store_ptr >= DCAF_RS_TICKET_STORE_MAX_SIZE - 1) {
+        ticket_store_ptr = 0;
+      } else {
+        ticket_store_ptr++;
+      }
+
+      if (ticket_store_size < DCAF_RS_TICKET_STORE_MAX_SIZE) {
+        ticket_store_size++;
+      }
+    } else {
+// Update ticket
+#ifndef NDEBUG
+      printf("update saved ticket face of client\n");
+#endif
+      memcpy(found_ticket->face_data, id, id_len);
+      found_ticket->face_len = id_len;
+    }
+  }
+
+  // clear key storage
+  memset(verifier, 0, sizeof(verifier));
+  psk.key_length = 0;
+
+#ifndef NDEBUG
+  printf("k = \n");
+  hexdump(dcaf_sam_secret, dcaf_sam_secret_size);
+  printf("face = \n");
+  hexdump(found_ticket->face_data, found_ticket->face_len);
+#endif
+  // calculate ticket verifier
+  hmac_ctx = dtls_hmac_new(dcaf_sam_secret, dcaf_sam_secret_size);
+
+  dtls_hmac_update(hmac_ctx, found_ticket->face_data, found_ticket->face_len);
+
+  psk.key_length = dtls_hmac_finalize(hmac_ctx, psk.key);
+  if (psk.key_length > DCAF_MAX_VERIFIER) {
+    psk.key_length = DCAF_MAX_VERIFIER; // clamp verifier length
+  }
+#ifdef DCAF_TIME
+  server_diff.cpu = energest_type_time(ENERGEST_TYPE_CPU) - server_last.cpu;
+  printf("Time: calc psk with hmac on ticket face: %li\n", server_diff.cpu);
+#endif
+
+#ifndef NDEBUG
+  printf("genereated verifier\n");
+  hexdump(psk.key, psk.key_length);
+#endif
+
+  *result = &psk;
+  dtls_hmac_free(hmac_ctx);
+  return 0;
+}
+
+/**
 * tinydtls handler which will be called on every connection state change
 */
 static int dtls_event(struct dtls_context_t *ctx, session_t *sess,
