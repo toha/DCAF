@@ -141,6 +141,59 @@ static struct energy_time server_diff2;
 #endif
 
 /**
+* tinydtls handler which will be called on every connection state change
+*/
+static int dtls_event(struct dtls_context_t *ctx, session_t *sess,
+                      dtls_alert_level_t level, unsigned short code) {
+#ifndef NDEBUG
+  printf("call: dtls_event\n");
+#endif
+  dtls_peer_t *peer;
+
+  if (level == 0 && code == DTLS_EVENT_CONNECTED) {
+    peer = dtls_get_peer(ctx, sess);
+    if (peer == NULL) {
+#ifndef NDEBUG
+      printf("peer not found\n");
+#endif
+      return -1;
+    }
+  }
+  return 0;
+}
+
+/**
+* tinydtls handler which will be called to send network data
+*/
+static ssize_t dcaf_network_send(struct coap_context_t *c,
+                                 const coap_endpoint_t *local_interface,
+                                 const coap_address_t *dst, unsigned char *data,
+                                 size_t datalen) {
+#ifndef NDEBUG
+  printf("call: dcaf_network_send\n");
+#endif
+  uint16_t local_port = uip_htons(local_interface->addr.port);
+  // DTLS or raw coap connection?
+  if (COAPS_DEFAULT_PORT == local_port) {
+    session_t ss;
+    dtls_session_init(&ss);
+    uip_ipaddr_copy(&ss.addr, &dst->addr);
+    ss.ifindex = local_interface->ifindex;
+    ss.port = dst->port;
+    ss.size = sizeof(ss.addr) + sizeof(ss.port);
+
+    ssize_t res = dtls_write(context.dtls_context, &ss, (uint8 *)data, datalen);
+    return res;
+
+  } else if (COAP_DEFAULT_PORT == local_port) {
+    return coap_network_send(context.coap_context, local_interface, dst, data,
+                             datalen);
+  } else {
+    return 0;
+  }
+}
+
+/**
 * tinydtls handler which will be called to read network data
 */
 static int dtls_read_from_peer(struct dtls_context_t *ctx, session_t *session,
