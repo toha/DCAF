@@ -141,6 +141,485 @@ static struct energy_time server_diff2;
 #endif
 
 /**
+* Get client ticket from client with session_t s
+*/
+static int get_ticket_face(const session_t *s,
+                           struct ticket_store_entry **face) {
+  int i = 0;
+  for (i = 0; i < ticket_store_size; i++) {
+    if (dtls_session_equals(ticket_faces[i].session, s)) {
+      *face = &ticket_faces[i];
+      return 0;
+    }
+  }
+  return -1;
+}
+
+/**
+* Checks if a secure connection to a peer is established
+*/
+static int is_secure(dtls_context_t *dctx,
+                     const coap_endpoint_t *local_interface,
+                     coap_address_t *peer, dtls_peer_t **peer_out) {
+#ifndef NDEBUG
+  printf("call: is_secure\n");
+#endif
+  // connection over coaps-port?
+  uint16_t local_port = uip_htons(local_interface->addr.port);
+  if (!local_interface || COAPS_DEFAULT_PORT != local_port) {
+    return -1;
+  }
+
+  // connection established?
+  session_t *s = (session_t *)peer;
+  s->size = sizeof(s->addr) + sizeof(s->port);
+  s->ifindex = local_interface->ifindex;
+  dtls_peer_t *p;
+  p = dtls_get_peer(dctx, s);
+
+  if (p == NULL || p->state != DTLS_STATE_CONNECTED) {
+#ifndef NDEBUG
+    printf("peer not found\n");
+#endif
+    return -2;
+  }
+
+  *peer_out = p;
+  return 0;
+}
+
+/**
+* Checks the authorization information in a ticket-face
+*/
+static int check_ticket_auth_info(struct ticket_store_entry *face,
+                                  struct coap_resource_t *resource,
+                                  coap_pdu_t *request) {
+#ifdef DCAF_TIME
+  server_last.cpu = energest_type_time(ENERGEST_TYPE_CPU);
+#endif
+
+#ifndef NDEBUG
+  printf("call: check_ticket_auth_info\n");
+#endif
+
+  // Decode CBOR-Ticket-Face or get saved cbor-face
+  const cn_cbor *cb;
+  if (face->cn_face == NULL) {
+    cb = cn_cbor_decode((char *)face->face_data, face->face_len, NULL);
+    face->cn_face = cb;
+  } else {
+    cb = face->cn_face;
+  }
+
+  if (!cb || cb->type != CN_CBOR_MAP) {
+#ifndef NDEBUG
+    printf("no cbor in ticket face found\n");
+#endif
+    return -1;
+  }
+
+  // read cbor-fields
+  const cn_cbor *ai = cn_cbor_mapget_int(cb, DCAF_TYPE_SAI);
+  const cn_cbor *sq = cn_cbor_mapget_int(cb, DCAF_TYPE_SQ);
+  const cn_cbor *ts = cn_cbor_mapget_int(cb, DCAF_TYPE_TS);
+  const cn_cbor *l = cn_cbor_mapget_int(cb, DCAF_TYPE_L);
+  const cn_cbor *g = cn_cbor_mapget_int(cb, DCAF_TYPE_G);
+  if (!sq || !ts || !l || !g) {
+#ifndef NDEBUG
+    printf("cbor field(s) missing\n");
+#endif
+    return -2;
+  }
+
+  // check revocation
+  int seq_nr = sq->v.uint;
+#ifndef NDEBUG
+  printf("seq_nr: %d\n", seq_nr);
+#endif
+  if (seq_nr < revocation_last_seq) {
+#if !defined(NDEBUG) || defined(DCAF_DEBUG)
+    printf("lower then window. seq_nr invalid\n");
+#endif
+    return -3;
+  } else if (seq_nr <= revocation_last_seq + DCAF_REVOCATION_WINDOW_SIZE - 1) {
+#ifndef NDEBUG
+    printf("seq_nr in window\n");
+#endif
+    // seq_nr between last_seq and last_sq + DCAF_REVOCATION_WINDOW_SIZE
+    // Check if bit for ticket in window is set
+    int window_pos = seq_nr - revocation_last_seq;
+    long mask = 1 << window_pos;
+#ifndef NDEBUG
+    printf("window_pos: %d\n", window_pos);
+    printf("mask: %lu\n", mask);
+    printf("revocation_bitmap: %lu\n", revocation_bitmap);
+#endif
+    long randm = revocation_bitmap & mask;
+    if (randm == mask) {
+#if !defined(NDEBUG) || defined(DCAF_DEBUG)
+      printf("S: ticket revoked!\n");
+#endif
+      return -3;
+    } else {
+    }
+  } else {
+// seq_nr higher then last_seq_nr + DCAF_REVOCATION_WINDOW_SIZE
+#ifndef NDEBUG
+    printf("seq_nr above window\n");
+#endif
+  }
+
+  // only check authorization information, if they are present (explicit authz)
+  if (ai) {
+    int i;
+    int match = 0;
+    // Check ai-list
+    for (i = 0; i < ai->length; i++) {
+      const cn_cbor *ai_el = cn_cbor_index(ai, i);
+      if (0 != strncmp(resource->uri.s, ai_el->first_child->v.str,
+                       ai_el->first_child->length)) {
+#ifndef NDEBUG
+        printf("ressource URI invalid\n");
+#endif
+        continue;
+      }
+      int req_method = 1 << (request->hdr->code - 1);
+      if ((ai_el->first_child->next->v.uint & req_method) != req_method) {
+#ifndef NDEBUG
+        printf("coap method not allowed\n");
+#endif
+        continue;
+      }
+      match = 1;
+    }
+    if (!match) {
+      return 4;
+    }
+  }
+
+  // Check lifetime
+  if (ts->v.uint + l->v.uint < clock_seconds()) {
+    printf("Ticket expired!\n");
+    return -5;
+  }
+
+#ifdef DCAF_TIME
+  server_diff.cpu = energest_type_time(ENERGEST_TYPE_CPU) - server_last.cpu;
+  printf("Time check authorization: %li\n", server_diff.cpu);
+#endif
+
+  // cn_cbor_free(cb); doesnt work!
+
+  return 0;
+}
+
+/**
+* authorize resource request
+*/
+static int handle_resource_auth(struct coap_resource_t *resource,
+                                const coap_endpoint_t *local_interface,
+                                coap_address_t *peer, coap_pdu_t *request,
+                                coap_pdu_t *response) {
+#if !defined(NDEBUG) || defined(DCAF_DEBUG)
+  printf("S: enforce access control\n");
+#endif
+
+  dtls_peer_t *dtls_peer = NULL;
+  if (0 != is_secure(context.dtls_context, local_interface, peer, &dtls_peer)) {
+#ifndef NDEBUG
+    printf("session not secure\n");
+#endif
+    response->hdr->code = COAP_RESPONSE_CODE(401);
+    return -1;
+  }
+
+  // Get saved ticket-face
+  struct ticket_store_entry *found_ticket = NULL;
+  if (0 != get_ticket_face(&dtls_peer->session, &found_ticket) ||
+      found_ticket == NULL) {
+#ifndef NDEBUG
+    printf("no ticket face found\n");
+#endif
+    response->hdr->code = COAP_RESPONSE_CODE(401);
+    return -2;
+  }
+
+  // Check auth info and revocation
+  int auth_res = check_ticket_auth_info(found_ticket, resource, request);
+
+#if !defined(NDEBUG) || defined(DCAF_DEBUG)
+  if (0 == auth_res) {
+    printf("S: found valid authz info\n");
+  } else {
+    printf("S: invalid authz info\n");
+  }
+
+#endif
+
+  switch (auth_res) {
+  case 0:
+    return 0;
+  case -3:
+    response->hdr->code = COAP_RESPONSE_CODE(403);
+    return -3;
+  case -4:
+    response->hdr->code = COAP_RESPONSE_CODE(405);
+    return -4;
+  case -5:
+    response->hdr->code = COAP_RESPONSE_CODE(405);
+    return -4;
+  default:
+    response->hdr->code = COAP_RESPONSE_CODE(401);
+    return -5;
+  }
+}
+
+/**
+* coap handler for temperature requests
+*/
+static void hnd_temp_1_get(coap_context_t *ctx,
+                           struct coap_resource_t *resource,
+                           const coap_endpoint_t *local_interface,
+                           coap_address_t *peer, coap_pdu_t *request,
+                           str *token, coap_pdu_t *response) {
+#ifdef DCAF_TIME
+  server_diff.cpu = energest_type_time(ENERGEST_TYPE_CPU) - server_last.cpu;
+  printf("Time coap request processing time: %li\n", server_diff.cpu);
+#endif
+
+#if !defined(NDEBUG) || defined(DCAF_DEBUG)
+  printf("S<-C: got coap request\n");
+#endif
+  // Check authorization
+  if (0 != handle_resource_auth(resource, local_interface, peer, request,
+                                response)) {
+#if !defined(NDEBUG) || defined(DCAF_DEBUG)
+    printf("S->C: send sam information message\n");
+#endif
+#ifdef DCAF_TIME
+    server_last2.cpu = energest_type_time(ENERGEST_TYPE_CPU);
+#endif
+    // genereate sam information message
+    cn_cbor *map;
+    map = cn_cbor_map_create(NULL);
+    cn_cbor *sam_auth = cn_cbor_string_create(dcaf_sam_auth_res, NULL);
+    cn_cbor_mapput_int(map, DCAF_TYPE_SAM, sam_auth, NULL);
+    cn_cbor *timestamp = cn_cbor_int_create(clock_seconds(), NULL);
+    cn_cbor_mapput_int(map, DCAF_TYPE_TS, timestamp, NULL);
+
+    unsigned char sam_info_cbor[DCAF_MAX_SAM_INFORMATION_MESSAGE];
+    size_t sam_info_cbor_length = cbor_encoder_write(
+        sam_info_cbor, 0, DCAF_MAX_SAM_INFORMATION_MESSAGE, map);
+
+    free(sam_auth->v.str);
+    // cn_cbor_free(map); // Doesnt work!
+
+    unsigned char buf[3];
+    coap_add_option(response, COAP_OPTION_CONTENT_TYPE,
+                    coap_encode_var_bytes(buf, COAP_MEDIATYPE_APPLICATION_DCAF),
+                    buf);
+    coap_add_data(response, sam_info_cbor_length, sam_info_cbor);
+#ifdef DCAF_TIME
+    server_diff2.cpu = energest_type_time(ENERGEST_TYPE_CPU) - server_last2.cpu;
+    printf("Time: create and send sam information message: %li\n",
+           server_diff2.cpu);
+#endif
+
+    return;
+  }
+
+  unsigned long secs_since_start = clock_seconds();
+  // simulated temperature function: 4 * sin(x/10) + 14
+  float sim_temp = 4 * sin((float)secs_since_start / 10.0) + 14;
+
+#if !defined(NDEBUG) || defined(DCAF_DEBUG)
+  printf("S->C: send resource response\n");
+#endif
+  char temp_str[4];
+  int str_l = sprintf(temp_str, "%d", (int)sim_temp);
+  response->hdr->code = COAP_RESPONSE_CODE(205);
+  coap_add_data(response, str_l, temp_str);
+}
+
+/**
+* coap handler for ticket revocation messages
+*/
+static void hnd_revocation_msg(coap_context_t *ctx,
+                               struct coap_resource_t *resource,
+                               const coap_endpoint_t *local_interface,
+                               coap_address_t *peer, coap_pdu_t *request,
+                               str *token, coap_pdu_t *response) {
+#if !defined(NDEBUG) || defined(DCAF_DEBUG)
+  printf("S<-SAM: got ticket revocation message\n");
+#endif
+#ifdef DCAF_TIME
+  server_last.cpu = energest_type_time(ENERGEST_TYPE_CPU);
+#endif
+  dtls_peer_t *dtls_peer = NULL;
+  if (0 != is_secure(context.dtls_context, local_interface, peer, &dtls_peer)) {
+#ifndef NDEBUG
+    printf("session not secure\n");
+#endif
+    response->hdr->code = COAP_RESPONSE_CODE(401);
+    return;
+  }
+
+  size_t payload_len;
+  unsigned char *payload;
+  coap_get_data(request, &payload_len, &payload);
+
+  const cn_cbor *cbr;
+  cbr = cn_cbor_decode((char *)payload, payload_len, NULL);
+  if (!cbr || cbr->type != CN_CBOR_ARRAY) {
+#ifndef NDEBUG
+    printf("no cbor data found\n");
+#endif
+    response->hdr->code = COAP_RESPONSE_CODE(401);
+    return;
+  }
+
+  int first_seq_nr = cbr->first_child->v.uint;
+
+  // extract seq numbers from request
+  uint32_t seq_nr = first_seq_nr;
+
+  if (seq_nr < revocation_last_seq) {
+    // seq-nr below window.. nothing to do, ticket will be rejected
+  } else if (seq_nr <= revocation_last_seq + DCAF_REVOCATION_WINDOW_SIZE - 1) {
+    // seq-nr in window. set bit
+    int bitidx = seq_nr - revocation_last_seq;
+    long mask = 1 << bitidx;
+    revocation_bitmap = revocation_bitmap | mask;
+
+  } else {
+    // seq-nr above window. slide window
+    int overflowing_bits =
+        seq_nr - (revocation_last_seq + DCAF_REVOCATION_WINDOW_SIZE - 1);
+
+    revocation_bitmap = revocation_bitmap >> overflowing_bits;
+    revocation_bitmap = revocation_bitmap | ((long)1 << 31);
+    revocation_last_seq += overflowing_bits;
+  }
+
+#ifdef DCAF_TIME
+  server_diff.cpu = energest_type_time(ENERGEST_TYPE_CPU) - server_last.cpu;
+  printf("Time: handle revocation message: %li\n", server_diff.cpu);
+#endif
+  response->hdr->code = COAP_RESPONSE_CODE(200);
+}
+
+/**
+* coap handler for commissioning messages
+*/
+static void hnd_key_msg(coap_context_t *ctx, struct coap_resource_t *resource,
+                        const coap_endpoint_t *local_interface,
+                        coap_address_t *peer, coap_pdu_t *request, str *token,
+                        coap_pdu_t *response) {
+#if !defined(NDEBUG) || defined(DCAF_DEBUG)
+  printf("S<-SAM: got new key from sam\n");
+#endif
+#ifdef DCAF_TIME
+  server_last.cpu = energest_type_time(ENERGEST_TYPE_CPU);
+#endif
+
+  dtls_peer_t *dtls_peer = NULL;
+  if (0 != is_secure(context.dtls_context, local_interface, peer, &dtls_peer)) {
+    response->hdr->code = COAP_RESPONSE_CODE(401);
+    return;
+  }
+
+  size_t payload_len;
+  unsigned char *payload;
+  coap_get_data(request, &payload_len, &payload);
+
+  const cn_cbor *cbl;
+  cbl = cn_cbor_decode((char *)payload, payload_len, NULL);
+
+  if (!cbl || cbl->type != CN_CBOR_MAP) {
+#ifndef NDEBUG
+    printf("no or wrong cbor data found\n");
+#endif
+    return;
+  }
+
+  const cn_cbor *cn_sam_key = cn_cbor_mapget_int(cbl, DCAF_TYPE_KEY);
+  const cn_cbor *cn_sam_uri = cn_cbor_mapget_int(cbl, DCAF_TYPE_SAM_URI);
+
+  if (!cn_sam_key || !cn_sam_uri || !cn_sam_key->v.str || !cn_sam_uri->v.str) {
+#if !defined(NDEBUG) || defined(DCAF_DEBUG)
+    printf("cbor field(s) missing\n");
+#endif
+    return;
+  }
+
+  // Send response early so the dtls-connection can be closed as quick as
+  // possible
+  response->hdr->code = COAP_RESPONSE_CODE(200);
+
+#if !defined(NDEBUG) || defined(DCAF_DEBUG)
+  printf("new sam ticket uri: %s\n", dcaf_sam_auth_res);
+  printf("new key k(sam,s):\n");
+  hexdump(dcaf_sam_secret, dcaf_sam_secret_size);
+#endif
+
+  // Adopt new key and new sam uri
+  memcpy(dcaf_sam_auth_res, cn_sam_uri->v.str, cn_sam_uri->length);
+  dcaf_sam_auth_res[cn_sam_uri->length] = '\0';
+  dcaf_sam_secret_size = cn_sam_key->length;
+  memcpy(dcaf_sam_secret, cn_sam_key->v.str, cn_sam_key->length);
+
+  // Destroy all open dtls connections to apply new key
+  dtls_peer_t *p;
+  if (context.dtls_context->peers) {
+    for (p = list_head(context.dtls_context->peers); p; p = list_item_next(p)) {
+      if (p != dtls_peer) {
+        dtls_destroy_peer(context.dtls_context, p, 1);
+      }
+    }
+  }
+
+#ifdef DCAF_TIME
+  server_diff.cpu = energest_type_time(ENERGEST_TYPE_CPU) - server_last.cpu;
+  printf("Time: Processing time commissioning msg: %li\n", server_diff.cpu);
+#endif
+}
+
+/**
+* register coap resources
+*/
+static int init_resources(coap_context_t *ctx) {
+#ifndef NDEBUG
+  printf("call: init_resources\n");
+#endif
+  coap_resource_t *resource_temp_1;
+  coap_resource_t *resource_revocation;
+  coap_resource_t *resource_lifecycle;
+
+  resource_temp_1 = coap_resource_init((unsigned char *)RESOURCE_TEMP_1,
+                                       strlen(RESOURCE_TEMP_1), 0);
+
+  resource_revocation = coap_resource_init((unsigned char *)RESOURCE_REVOCATION,
+                                           strlen(RESOURCE_REVOCATION), 0);
+
+  resource_lifecycle = coap_resource_init((unsigned char *)RESOURCE_KEY,
+                                          strlen(RESOURCE_KEY), 0);
+
+  if (resource_temp_1 && resource_revocation && resource_lifecycle) {
+    coap_register_handler(resource_temp_1, COAP_REQUEST_GET, hnd_temp_1_get);
+    coap_register_handler(resource_revocation, COAP_REQUEST_POST,
+                          hnd_revocation_msg);
+    coap_register_handler(resource_lifecycle, COAP_REQUEST_POST, hnd_key_msg);
+
+    coap_add_resource(ctx, resource_temp_1);
+    coap_add_resource(ctx, resource_revocation);
+    coap_add_resource(ctx, resource_lifecycle);
+  }
+
+  return resource_temp_1 != NULL && resource_revocation != NULL &&
+         resource_lifecycle != NULL;
+}
+
+/**
 * tinydtls handler to get psk
 */
 static int get_psk_key(struct dtls_context_t *ctx, const session_t *sess,
@@ -399,7 +878,6 @@ static void handle_tcpip_event() {
   }
 }
 
-
 static void print_local_addresses(void) {
   int i;
   uint8_t state;
@@ -413,8 +891,6 @@ static void print_local_addresses(void) {
     }
   }
 }
-
-
 
 static void init_network() {
 #ifndef NDEBUG
@@ -456,7 +932,6 @@ static void init_network() {
 
   init_resources(context.coap_context);
 }
-
 
 PROCESS(dcaf_rs1_process, "dcaf_rs1_process");
 AUTOSTART_PROCESSES(&dcaf_rs1_process);
